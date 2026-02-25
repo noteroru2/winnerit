@@ -1,5 +1,6 @@
 // src/lib/wp.ts
 import { unstable_cache } from "next/cache";
+import { getSiteKey } from "@/lib/site-key";
 
 // บน Vercel (build + production): timeout สั้น + ไม่ retry + fallback เมื่อ error → build ไม่ค้าง 120s
 const isVercel = process.env.VERCEL === "1";
@@ -145,7 +146,7 @@ export async function fetchGql<T>(
   options?: { revalidate?: number }
 ): Promise<T> {
   const revalidate = options?.revalidate ?? 86400; // 24 ชม. default กัน WP ล่ม
-  const cacheKey = ["wp-gql", query, JSON.stringify(variables ?? "")];
+  const cacheKey = ["wp-gql", getSiteKey(), query, JSON.stringify(variables ?? "")];
   const cached = unstable_cache(
     () => fetchGqlUncached<T>(query, variables),
     cacheKey,

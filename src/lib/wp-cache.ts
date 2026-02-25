@@ -5,6 +5,7 @@
  */
 import { unstable_cache } from "next/cache";
 import { fetchGql } from "@/lib/wp";
+import { getSiteKey } from "@/lib/site-key";
 import {
   Q_SERVICES_LIST,
   Q_LOCATIONPAGES_LIST,
@@ -15,11 +16,15 @@ import {
 const CACHE_TAG = "wp-lists";
 const REVALIDATE = 3600;
 
+function cacheKey(...parts: string[]) {
+  return [CACHE_TAG, getSiteKey(), ...parts];
+}
+
 /** Cache Hub Index — ใช้ใน category/location/service/price pages; tag "wp" ให้ revalidate API ล้างได้ */
 export async function getCachedHubIndex() {
   return unstable_cache(
     async () => fetchGql<any>(Q_HUB_INDEX, undefined, { revalidate: REVALIDATE }),
-    [CACHE_TAG, "hub-index"],
+    cacheKey("hub-index"),
     { revalidate: REVALIDATE, tags: [CACHE_TAG, "wp"] }
   )();
 }
@@ -27,7 +32,7 @@ export async function getCachedHubIndex() {
 export async function getCachedServicesList() {
   return unstable_cache(
     async () => fetchGql<any>(Q_SERVICES_LIST, undefined, { revalidate: REVALIDATE }),
-    [CACHE_TAG, "services"],
+    cacheKey("services"),
     { revalidate: REVALIDATE, tags: [CACHE_TAG, "wp"] }
   )();
 }
@@ -35,7 +40,7 @@ export async function getCachedServicesList() {
 export async function getCachedLocationpagesList() {
   return unstable_cache(
     async () => fetchGql<any>(Q_LOCATIONPAGES_LIST, undefined, { revalidate: REVALIDATE }),
-    [CACHE_TAG, "locationpages"],
+    cacheKey("locationpages"),
     { revalidate: REVALIDATE, tags: [CACHE_TAG, "wp"] }
   )();
 }
@@ -43,7 +48,7 @@ export async function getCachedLocationpagesList() {
 export async function getCachedPricemodelsList() {
   return unstable_cache(
     async () => fetchGql<any>(Q_PRICEMODELS_LIST, undefined, { revalidate: REVALIDATE }),
-    [CACHE_TAG, "pricemodels"],
+    cacheKey("pricemodels"),
     { revalidate: REVALIDATE, tags: [CACHE_TAG, "wp"] }
   )();
 }

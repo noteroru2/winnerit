@@ -19,6 +19,7 @@
 | `WPGRAPHQL_ENDPOINT` | `https://โดเมน-WP-ของคุณ/graphql` | **สำคัญที่สุด** ต้องชี้ไปที่ WPGraphQL ของ WordPress จริง (เช่น `https://cms.example.com/graphql`) |
 | `SITE_URL` | `https://winnerit.vercel.app` | URL เว็บ frontend จริง (ถ้าใช้ domain อื่น ให้ใส่ domain นั้น) |
 | `SITE_KEY` | `winnerit` (สำหรับ Winner IT) หรือ `webuy` (สำหรับ webuy) | **สำคัญ** ใช้กรองเนื้อหาจาก WP — โพสต์ที่ field `site` = ค่านี้ (หรือว่าง) ถึงจะโชว์บนเว็บนี้ |
+| `NEXT_PUBLIC_SITE_KEY` | (เหมือน SITE_KEY) | ถ้าตั้งค่านี้ด้วย จะใช้เป็น fallback และมีผลตอน build (แนะนำให้ตั้งทั้งคู่ใน Vercel) |
 
 ### ตัวแปรเสริม (ถ้ามี)
 

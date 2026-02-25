@@ -17,16 +17,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="preconnect" href="https://line.me" />
         <link rel="dns-prefetch" href="https://line.me" />
       </head>
-      <body className="min-h-screen bg-slate-50 text-slate-900 antialiased">
-        <SiteHeader brand="Winner IT" />
+      <body className="min-h-screen bg-slate-200 text-slate-900 antialiased">
+        <div className="min-h-screen flex flex-col items-center py-4 sm:py-6 px-3 sm:px-4">
+          <div className="w-full max-w-6xl rounded-2xl sm:rounded-3xl shadow-xl overflow-hidden bg-white flex flex-col min-h-0">
+            <SiteHeader brand="Winner IT" />
 
-        <main className="min-h-[60vh]">{children}</main>
+            <main className="flex-1 min-h-[50vh]">{children}</main>
 
-        <FloatingLineButton />
-
-        {/* CONTACT + FOOTER: แถบเดียว มินิมอล */}
-        <footer id="contact" className="bg-slate-900 text-slate-300">
-          <div className="mx-auto max-w-6xl px-4 py-14">
+            {/* CONTACT + FOOTER: แถบเดียว มินิมอล */}
+            <footer id="contact" className="bg-slate-900 text-slate-300">
+              <div className="mx-auto max-w-6xl px-4 py-14">
             <div className="flex flex-col gap-10 lg:flex-row lg:items-start lg:justify-between">
               {/* ซ้าย: แบรนด์ + LINE ใหญ่ */}
               <div className="space-y-6">
@@ -72,8 +72,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <div className="mt-12 pt-8 border-t border-slate-700 text-xs text-slate-500">
               © {new Date().getFullYear()} {BUSINESS_INFO.legalName} — {BUSINESS_INFO.name}
             </div>
+              </div>
+            </footer>
           </div>
-        </footer>
+        </div>
+        <FloatingLineButton />
       </body>
     </html>
   );

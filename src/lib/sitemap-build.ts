@@ -18,11 +18,6 @@ function isPublish(status: any) {
   return String(status || "").toLowerCase() === "publish";
 }
 
-function isWebuy(site: any) {
-  const s = String(site || "").toLowerCase();
-  return !s || s === "webuy";
-}
-
 export type SitemapEntry = {
   url: string;
   lastModified: Date;
