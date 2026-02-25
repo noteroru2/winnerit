@@ -4,8 +4,9 @@ import { Q_HUB_INDEX } from "@/lib/queries";
 import { getCategoriesFromHub } from "@/lib/categories";
 import type { Metadata } from "next";
 import { pageMetadata } from "@/lib/seo";
+import { BUSINESS_INFO } from "@/lib/constants";
 
-export const revalidate = 86400; // 24 ชม. กัน WP ล่มตอน ISR
+export const revalidate = 86400;
 
 export const metadata: Metadata = pageMetadata({
   title: "หมวดสินค้า | Winner IT",
@@ -14,69 +15,110 @@ export const metadata: Metadata = pageMetadata({
   pathname: "/categories",
 });
 
+const CATEGORY_ICONS: Record<string, string> = {
+  notebook: "💻",
+  mobile: "📱",
+  tablet: "📱",
+  computer: "🖥️",
+  accessories: "⌨️",
+  camera: "📷",
+  gaming: "🎮",
+  smartwatch: "⌚",
+};
+
 export default async function Page() {
   const raw = await fetchGql<any>(Q_HUB_INDEX, undefined, { revalidate });
   const data = raw ?? {};
-
   const categories = getCategoriesFromHub(data);
 
   return (
-    <div className="space-y-10 py-8">
-      {/* HERO */}
-      <section className="card hero card-pad">
-        <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
-          <div className="space-y-3">
-            <h1 className="h1">หมวดสินค้า</h1>
-            <p className="lead">
-              เลือกหมวดที่สนใจเพื่อดูบริการรับซื้อ พื้นที่ให้บริการ ราคารับซื้อ และคำถามที่พบบ่อยในหมวดนั้น
-            </p>
-
-            <div className="flex flex-wrap gap-3 pt-2">
-              <a className="btn btn-primary" href="https://line.me/R/ti/p/@webuy" target="_blank" rel="noreferrer">
-                แชท LINE @webuy
-              </a>
-              <Link className="btn btn-ghost" href="/">
-                ← กลับหน้าแรก
-              </Link>
-            </div>
-          </div>
-
-          <div className="kpi sm:w-[200px]">
-            <div className="label">หมวดสินค้า</div>
-            <div className="value">{categories.length}</div>
+    <div className="min-h-[60vh]">
+      {/* Hero: สั้น กระชับ ไม่มีกล่อง 0 แยก */}
+      <section className="bg-slate-900 text-white">
+        <div className="mx-auto max-w-6xl px-4 py-12 sm:py-16">
+          <nav className="mb-6 text-sm">
+            <Link href="/" className="text-white/70 hover:text-white">หน้าแรก</Link>
+            <span className="mx-2 text-white/50">/</span>
+            <span className="text-white">หมวดสินค้า</span>
+          </nav>
+          <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
+            หมวดสินค้า
+          </h1>
+          <p className="mt-3 max-w-xl text-white/80 text-sm sm:text-base">
+            เลือกหมวดที่สนใจเพื่อดูบริการรับซื้อ พื้นที่ให้บริการ ราคารับซื้อ และคำถามที่พบบ่อย
+          </p>
+          <div className="mt-6 flex flex-wrap gap-3">
+            <a
+              className="inline-flex items-center gap-2 rounded-xl bg-brand-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-600 transition"
+              href={BUSINESS_INFO.lineUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              💬 แชท LINE
+            </a>
+            <Link
+              className="inline-flex items-center gap-2 rounded-xl border border-white/30 px-5 py-2.5 text-sm font-semibold text-white hover:bg-white/10 transition"
+              href="/"
+            >
+              ← กลับหน้าแรก
+            </Link>
           </div>
         </div>
       </section>
 
-      {/* LIST */}
-      <section className="section scroll-mt-24">
-        <h2 className="h2">รายการหมวดสินค้า</h2>
+      {/* รายการหมวด: grid การ์ดมีไอคอน สวยงาม */}
+      <section className="mx-auto max-w-6xl px-4 py-10">
+        <div className="flex items-center justify-between gap-4 mb-6">
+          <h2 className="text-lg font-bold text-slate-900">
+            รายการหมวดสินค้า
+            {categories.length > 0 && (
+              <span className="ml-2 text-slate-500 font-normal">({categories.length} หมวด)</span>
+            )}
+          </h2>
+        </div>
 
-        <div className="cards-grid">
-          {categories.map((c) => (
-            <Link
-              key={c.slug}
-              href={`/categories/${c.slug}`}
-              className="card group p-6 transition hover:-translate-y-0.5 hover:shadow-md"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="text-lg font-extrabold">{c.name}</div>
-                  <div className="muted mt-1 text-sm">
-                    {c.count > 0
-                      ? <>มีเนื้อหาในหมวดนี้ประมาณ <span className="font-semibold text-slate-900">{c.count}</span> รายการ</>
-                      : "มีบริการ • พื้นที่ • ราคา ในหมวดนี้"}
+        {categories.length > 0 ? (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {categories.map((c) => (
+              <Link
+                key={c.slug}
+                href={`/categories/${c.slug}`}
+                className="group flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-all hover:border-brand-300 hover:shadow-md"
+              >
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-brand-50 text-2xl transition group-hover:bg-brand-100">
+                  {CATEGORY_ICONS[c.slug] ?? "📦"}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="font-bold text-slate-900 group-hover:text-brand-600 transition-colors">
+                    {c.name}
+                  </div>
+                  <div className="mt-0.5 text-sm text-slate-500">
+                    {c.count > 0 ? `${c.count} รายการ` : "บริการ • พื้นที่ • ราคา"}
                   </div>
                 </div>
-                <span className="badge">{c.slug}</span>
-              </div>
-
-              <div className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-brand-700">
-                เข้าไปดูหมวด <span className="transition group-hover:translate-x-0.5">→</span>
-              </div>
-            </Link>
-          ))}
-        </div>
+                <span className="shrink-0 text-slate-400 transition group-hover:translate-x-1 group-hover:text-brand-500">
+                  →
+                </span>
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-12 text-center">
+            <div className="text-5xl mb-4">📦</div>
+            <h3 className="text-xl font-bold text-slate-900 mb-2">ยังไม่มีหมวดสินค้า</h3>
+            <p className="text-slate-600 text-sm max-w-md mx-auto mb-6">
+              กำลังเพิ่มหมวดสินค้าใหม่ ติดต่อ LINE เพื่อสอบถามหรือประเมินราคาได้เลย
+            </p>
+            <a
+              href={BUSINESS_INFO.lineUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-2 rounded-xl bg-brand-500 px-6 py-3 text-sm font-semibold text-white hover:bg-brand-600 transition"
+            >
+              💬 แชท LINE
+            </a>
+          </div>
+        )}
       </section>
     </div>
   );
