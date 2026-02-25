@@ -1,14 +1,14 @@
 ---
-description: Commit and push after making code changes
+description: ทุกครั้งที่แก้โค้ด ต้อง commit และ push
 alwaysApply: true
 ---
 
-# Git after code changes
+# Git หลังแก้โค้ด (บังคับ)
 
-Whenever you modify project files (source, config, or content):
+**ทุกครั้ง** ที่แก้ไขไฟล์ในโปรเจกต์ (source, config, หรือ content) ให้ทำตามนี้:
 
-1. Stage all changes: `git add -A` (or add only relevant paths).
-2. Commit with a short, descriptive message in the same language as the change (e.g. Thai or English).
-3. Push to the current branch: `git push`.
+1. Stage: `git add -A` (หรือเฉพาะ path ที่แก้)
+2. Commit: ข้อความสั้น ตรงกับสิ่งที่เปลี่ยน (ไทยหรืออังกฤษก็ได้)
+3. Push: `git push`
 
-Do not announce the commit or push to the user; do it as part of the workflow. Skip only if the user explicitly says not to commit, or if there are no changes.
+ทำเป็นส่วนหนึ่งของ workflow โดยไม่ต้องประกาศให้ user ทราบ ยกเว้นเมื่อ user บอกชัดเจนว่า **ไม่ต้อง commit** หรือเมื่อ **ไม่มีไฟล์ใดเปลี่ยน**
