@@ -8,6 +8,7 @@ import {
   Q_PRICE_SLUGS,
   Q_DEVICECATEGORY_SLUGS,
 } from "@/lib/queries";
+import { isSiteMatch } from "@/lib/site-key";
 
 export const SITEMAP_REVALIDATE = 86400;
 /** สั้นมาก — ให้ตอบภายใน ~2s เพื่อ Google ไม่ timeout (ดึงข้อมูลได้) */
@@ -72,19 +73,19 @@ export async function getSitemapEntries(): Promise<SitemapEntry[]> {
   }
 
   for (const n of svc?.services?.nodes ?? []) {
-    if (!n?.slug || !isPublish(n?.status) || !isWebuy(n?.site)) continue;
+    if (!n?.slug || !isPublish(n?.status) || !isSiteMatch(n?.site)) continue;
     push(`${base}/services/${n.slug}`, "weekly", 0.9);
   }
   for (const n of loc?.locationpages?.nodes ?? []) {
-    if (!n?.slug || !isPublish(n?.status) || !isWebuy(n?.site)) continue;
+    if (!n?.slug || !isPublish(n?.status) || !isSiteMatch(n?.site)) continue;
     push(`${base}/locations/${n.slug}`, "weekly", 0.8);
   }
   for (const n of pri?.pricemodels?.nodes ?? []) {
-    if (!n?.slug || !isPublish(n?.status) || !isWebuy(n?.site)) continue;
+    if (!n?.slug || !isPublish(n?.status) || !isSiteMatch(n?.site)) continue;
     push(`${base}/prices/${n.slug}`, "weekly", 0.7);
   }
   for (const n of cat?.devicecategories?.nodes ?? []) {
-    if (!n?.slug || !isWebuy(n?.site)) continue;
+    if (!n?.slug || !isSiteMatch(n?.site)) continue;
     push(`${base}/categories/${n.slug}`, "weekly", 0.6);
   }
 
@@ -157,7 +158,7 @@ export async function getLocationsEntries(): Promise<SitemapEntry[]> {
   );
   const items: SitemapEntry[] = [];
   for (const n of data?.locationpages?.nodes ?? []) {
-    if (!n?.slug || !isPublish(n?.status) || !isWebuy(n?.site)) continue;
+    if (!n?.slug || !isPublish(n?.status) || !isSiteMatch(n?.site)) continue;
     items.push({ url: `${base}/locations/${n.slug}`, lastModified: now, changeFrequency: "weekly", priority: 0.8 });
   }
   return items;
@@ -172,7 +173,7 @@ export async function getServicesEntries(): Promise<SitemapEntry[]> {
   );
   const items: SitemapEntry[] = [];
   for (const n of data?.services?.nodes ?? []) {
-    if (!n?.slug || !isPublish(n?.status) || !isWebuy(n?.site)) continue;
+    if (!n?.slug || !isPublish(n?.status) || !isSiteMatch(n?.site)) continue;
     items.push({ url: `${base}/services/${n.slug}`, lastModified: now, changeFrequency: "weekly", priority: 0.9 });
   }
   return items;
@@ -187,7 +188,7 @@ export async function getCategoriesEntries(): Promise<SitemapEntry[]> {
   );
   const items: SitemapEntry[] = [];
   for (const n of data?.devicecategories?.nodes ?? []) {
-    if (!n?.slug || !isWebuy(n?.site)) continue;
+    if (!n?.slug || !isSiteMatch(n?.site)) continue;
     items.push({ url: `${base}/categories/${n.slug}`, lastModified: now, changeFrequency: "weekly", priority: 0.6 });
   }
   return items;
@@ -202,7 +203,7 @@ export async function getPricesEntries(): Promise<SitemapEntry[]> {
   );
   const items: SitemapEntry[] = [];
   for (const n of data?.pricemodels?.nodes ?? []) {
-    if (!n?.slug || !isPublish(n?.status) || !isWebuy(n?.site)) continue;
+    if (!n?.slug || !isPublish(n?.status) || !isSiteMatch(n?.site)) continue;
     items.push({ url: `${base}/prices/${n.slug}`, lastModified: now, changeFrequency: "weekly", priority: 0.7 });
   }
   return items;

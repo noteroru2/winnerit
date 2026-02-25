@@ -4,6 +4,7 @@ import { pageMetadata } from "@/lib/seo";
 import { fetchGql } from "@/lib/wp";
 import { Q_LOCATION_SLUGS } from "@/lib/queries";
 import { BUSINESS_INFO } from "@/lib/constants";
+import { isSiteMatch } from "@/lib/site-key";
 
 export const revalidate = 86400;
 
@@ -26,8 +27,7 @@ export default async function Page() {
     const nodes = (data?.locationpages?.nodes ?? [])
       .filter((n: any) => {
         if (!n?.slug || !isPublish(n?.status)) return false;
-        const s = String(n?.site || "").toLowerCase();
-        return !s || s === "webuy";
+        return isSiteMatch(n?.site);
       })
       .sort((a: any, b: any) => String(a.title || "").localeCompare(String(b.title || ""), "th"));
     if (nodes.length > 0) locations = nodes;

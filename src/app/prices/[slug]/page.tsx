@@ -9,6 +9,7 @@ import { jsonLdProductOffer, jsonLdBreadcrumb } from "@/lib/jsonld";
 import type { Metadata } from "next";
 import { pageMetadata, inferDescriptionFromHtml } from "@/lib/seo";
 import { jsonLdReviewAggregate } from "@/lib/jsonld";
+import { isSiteMatch } from "@/lib/site-key";
 
 export const revalidate = 86400; // 24 ชม. — กัน WP ล่มตอน ISR
 export const dynamicParams = true;
@@ -36,11 +37,12 @@ export async function generateMetadata({ params }: { params: { slug: string } })
 
   try {
     let price: any = (await getCachedPricemodelsList())?.pricemodels?.nodes?.find(
-      (n: any) => String(n?.slug || "").toLowerCase() === String(slug).toLowerCase()
+      (n: any) => isSiteMatch(n?.site) && String(n?.slug || "").toLowerCase() === String(slug).toLowerCase()
     );
     if (!price) {
       const bySlug = await fetchGql<{ pricemodels?: { nodes?: any[] } }>(Q_PRICE_BY_SLUG, { slug }, { revalidate: 3600 });
-      price = bySlug?.pricemodels?.nodes?.[0];
+      const node = bySlug?.pricemodels?.nodes?.[0];
+      if (node && isSiteMatch(node?.site)) price = node;
     }
     if (!price || String(price?.status || "").toLowerCase() !== "publish") return {};
 
@@ -73,11 +75,11 @@ export default async function Page({ params }: { params: { slug: string } }) {
 
   try {
     const data = await getCachedPricemodelsList();
-    price = (data?.pricemodels?.nodes ?? []).find((n: any) => String(n?.slug || "").toLowerCase() === String(slug).toLowerCase());
+    price = (data?.pricemodels?.nodes ?? []).find((n: any) => isSiteMatch(n?.site) && String(n?.slug || "").toLowerCase() === String(slug).toLowerCase());
     if (!price) {
       const bySlug = await fetchGql<{ pricemodels?: { nodes?: any[] } }>(Q_PRICE_BY_SLUG, { slug }, { revalidate: 3600 });
       const node = bySlug?.pricemodels?.nodes?.[0];
-      if (node && String(node?.status || "").toLowerCase() === "publish") price = node;
+      if (node && String(node?.status || "").toLowerCase() === "publish" && isSiteMatch(node?.site)) price = node;
     }
     if (!price) notFound();
   } catch (error) {
@@ -88,7 +90,12 @@ export default async function Page({ params }: { params: { slug: string } }) {
   const emptyIndex = { services: { nodes: [] as any[] }, locationpages: { nodes: [] as any[] }, pricemodels: { nodes: [] as any[] } };
   try {
     const raw = await fetchGql<any>(Q_HUB_INDEX, undefined, { revalidate: 3600 });
-    index = raw ?? emptyIndex;
+    const r = raw ?? emptyIndex;
+    index = {
+      services: { nodes: (r.services?.nodes ?? []).filter((n: any) => isSiteMatch(n?.site)) },
+      locationpages: { nodes: (r.locationpages?.nodes ?? []).filter((n: any) => isSiteMatch(n?.site)) },
+      pricemodels: { nodes: (r.pricemodels?.nodes ?? []).filter((n: any) => isSiteMatch(n?.site)) },
+    };
   } catch (error) {
     console.error('Error fetching hub index:', error);
     index = emptyIndex;

@@ -5,6 +5,7 @@ import { getCategoriesFromHub } from "@/lib/categories";
 import type { Metadata } from "next";
 import { pageMetadata } from "@/lib/seo";
 import { BUSINESS_INFO } from "@/lib/constants";
+import { isSiteMatch } from "@/lib/site-key";
 
 export const revalidate = 86400;
 
@@ -29,7 +30,13 @@ const CATEGORY_ICONS: Record<string, string> = {
 export default async function Page() {
   const raw = await fetchGql<any>(Q_HUB_INDEX, undefined, { revalidate });
   const data = raw ?? {};
-  const categories = getCategoriesFromHub(data);
+  const dataForCategories = {
+    ...data,
+    devicecategories: {
+      nodes: (data.devicecategories?.nodes ?? []).filter((n: any) => isSiteMatch(n?.site)),
+    },
+  };
+  const categories = getCategoriesFromHub(dataForCategories);
 
   return (
     <div className="min-h-[60vh]">

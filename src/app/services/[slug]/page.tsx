@@ -12,6 +12,7 @@ import { pageMetadata, inferDescriptionFromHtml } from "@/lib/seo";
 import { jsonLdBreadcrumb } from "@/lib/jsonld";
 import { jsonLdReviewAggregate } from "@/lib/jsonld";
 import { serviceFaqSeed } from "@/lib/seoLocation";
+import { isSiteMatch } from "@/lib/site-key";
 
 export const revalidate = 86400; // 24 ชม. — กัน WP ล่มตอน ISR
 export const dynamicParams = true;
@@ -72,14 +73,14 @@ export default async function Page({ params }: { params: { slug: string } }) {
 
   try {
     const data = await getCachedServicesList();
-    service = (data?.services?.nodes ?? []).find((n: any) => String(n?.slug || "").toLowerCase() === String(slug).toLowerCase());
+    service = (data?.services?.nodes ?? []).find((n: any) => isSiteMatch(n?.site) && String(n?.slug || "").toLowerCase() === String(slug).toLowerCase());
     // ถ้าไม่อยู่ใน cache (เนื้อหาใหม่จาก WP) — ดึงจาก WP ตาม slug
     if (!service) {
       const bySlug = await fetchGql<{ services?: { nodes?: any[] } }>(Q_SERVICE_BY_SLUG, { slug }, { revalidate: 3600 });
       const node = bySlug?.services?.nodes?.[0];
-      if (node && String(node?.status || "").toLowerCase() === "publish") service = node;
+      if (node && String(node?.status || "").toLowerCase() === "publish" && isSiteMatch(node?.site)) service = node;
     }
-    if (!service) notFound();
+    if (!service || !isSiteMatch(service?.site)) notFound();
   } catch (error) {
     console.error("Error fetching service:", slug, error);
     notFound();
@@ -88,7 +89,13 @@ export default async function Page({ params }: { params: { slug: string } }) {
   const emptyIndex = { services: { nodes: [] as any[] }, locationpages: { nodes: [] as any[] }, pricemodels: { nodes: [] as any[] }, faqs: { nodes: [] as any[] } };
   try {
     const raw = await fetchGql<any>(Q_HUB_INDEX, undefined, { revalidate: 3600 });
-    index = raw ?? emptyIndex;
+    const r = raw ?? emptyIndex;
+    index = {
+      services: { nodes: (r.services?.nodes ?? []).filter((n: any) => isSiteMatch(n?.site)) },
+      locationpages: { nodes: (r.locationpages?.nodes ?? []).filter((n: any) => isSiteMatch(n?.site)) },
+      pricemodels: { nodes: (r.pricemodels?.nodes ?? []).filter((n: any) => isSiteMatch(n?.site)) },
+      faqs: r.faqs ? { nodes: (r.faqs?.nodes ?? []).filter((n: any) => isSiteMatch(n?.site)) } : undefined,
+    };
   } catch (error) {
     console.error('Error fetching hub index:', error);
     index = emptyIndex;

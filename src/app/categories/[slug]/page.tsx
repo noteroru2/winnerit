@@ -13,6 +13,7 @@ import { categoryFaqSeed } from "@/lib/seoCategory";
 import { BackToTop } from "@/components/BackToTop";
 import { EmptyState } from "@/components/EmptyState";
 import { BUSINESS_INFO } from "@/lib/constants";
+import { isSiteMatch } from "@/lib/site-key";
 
 export const revalidate = 86400; // 24 ชม. — กัน WP ล่มตอน ISR
 export const dynamicParams = true;
@@ -32,7 +33,8 @@ export async function generateMetadata({ params }: { params: { slug: string } })
   if (!slug) return {};
 
   const index = await fetchGql<any>(Q_HUB_INDEX, undefined, { revalidate: 3600 }).catch(() => null);
-  let term: any = (index?.devicecategories?.nodes ?? []).find(
+  const indexNodes = (index?.devicecategories?.nodes ?? []).filter((n: any) => isSiteMatch(n?.site));
+  let term: any = indexNodes.find(
     (n: any) => String(n?.slug || "").toLowerCase() === slug.toLowerCase()
   );
   if (!term?.slug) {
@@ -58,6 +60,14 @@ export default async function Page({ params }: { params: { slug: string } }) {
   if (!slugParam) notFound();
 
   let data = await fetchGql<any>(Q_HUB_INDEX, undefined, { revalidate: 86400 }).catch(() => ({}));
+  const raw = data ?? {};
+  data = {
+    ...raw,
+    services: { nodes: (raw.services?.nodes ?? []).filter((n: any) => isSiteMatch(n?.site)) },
+    locationpages: { nodes: (raw.locationpages?.nodes ?? []).filter((n: any) => isSiteMatch(n?.site)) },
+    pricemodels: { nodes: (raw.pricemodels?.nodes ?? []).filter((n: any) => isSiteMatch(n?.site)) },
+    devicecategories: { nodes: (raw.devicecategories?.nodes ?? []).filter((n: any) => isSiteMatch(n?.site)) },
+  };
   const missingLists =
     (data?.services?.nodes?.length ?? 0) === 0 &&
     (data?.locationpages?.nodes?.length ?? 0) === 0 &&

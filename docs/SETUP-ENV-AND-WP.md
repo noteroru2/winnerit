@@ -18,7 +18,7 @@
 |------|--------|----------|
 | `WPGRAPHQL_ENDPOINT` | `https://โดเมน-WP-ของคุณ/graphql` | **สำคัญที่สุด** ต้องชี้ไปที่ WPGraphQL ของ WordPress จริง (เช่น `https://cms.example.com/graphql`) |
 | `SITE_URL` | `https://winnerit.vercel.app` | URL เว็บ frontend จริง (ถ้าใช้ domain อื่น ให้ใส่ domain นั้น) |
-| `SITE_KEY` | `webuy` | ใช้กรอง content ตาม site (ใน WP ถ้า post มี field `site` ว่างหรือ `webuy` ถึงจะโชว์) |
+| `SITE_KEY` | `winnerit` (สำหรับ Winner IT) หรือ `webuy` (สำหรับ webuy) | **สำคัญ** ใช้กรองเนื้อหาจาก WP — โพสต์ที่ field `site` = ค่านี้ (หรือว่าง) ถึงจะโชว์บนเว็บนี้ |
 
 ### ตัวแปรเสริม (ถ้ามี)
 
@@ -76,7 +76,7 @@
 
 - **Service**  
   - ต้องมี: `slug`, `title`, `content` (หรือเทียบเท่า), สถานะ **Publish**  
-  - มี field `site` (text) ได้ — ถ้าว่างหรือ `webuy` ถึงจะโชว์
+  - มี field `site` (text) ได้ — ถ้าว่างหรือตรงกับ **SITE_KEY** ที่ตั้งใน Vercel ถึงจะโชว์บนเว็บนั้น (เช่น Winner IT ใช้ `SITE_KEY=winnerit` และใน WP ตั้ง `site = winnerit`)
 
 - **Location Page**  
   - ต้องมี: `slug`, `title`, `content`, สถานะ **Publish**  
@@ -154,7 +154,7 @@
 
 - [ ] ตั้ง `WPGRAPHQL_ENDPOINT` = URL GraphQL ของ WordPress
 - [ ] ตั้ง `SITE_URL` = URL เว็บ Winner IT (เช่น https://winnerit.vercel.app)
-- [ ] ตั้ง `SITE_KEY` = webuy
+- [ ] ตั้ง `SITE_KEY` ตาม site ที่ใช้ (เช่น `winnerit` สำหรับ Winner IT หรือ `webuy` สำหรับ webuy)
 - [ ] Save แล้ว Redeploy (แนะนำ Clear Build Cache ครั้งแรก)
 
 **WordPress**

@@ -3,6 +3,7 @@ import Image from "next/image";
 import { fetchGql, siteUrl } from "@/lib/wp";
 import { Q_HUB_INDEX } from "@/lib/queries";
 import { getCategoriesFromHub } from "@/lib/categories";
+import { isSiteMatch } from "@/lib/site-key";
 import type { Metadata } from "next";
 import { pageMetadata } from "@/lib/seo";
 import JsonLd from "@/components/JsonLd";
@@ -33,11 +34,16 @@ export default async function Page() {
   const raw = await fetchGql<any>(Q_HUB_INDEX, undefined, { revalidate });
   const data = raw ?? {};
 
-  const servicesAll = data.services?.nodes ?? [];
-  const locationsAll = data.locationpages?.nodes ?? [];
-  const pricesAll = data.pricemodels?.nodes ?? [];
-
-  const categories = getCategoriesFromHub(data);
+  const servicesAll = (data.services?.nodes ?? []).filter((n: any) => isSiteMatch(n?.site));
+  const locationsAll = (data.locationpages?.nodes ?? []).filter((n: any) => isSiteMatch(n?.site));
+  const pricesAll = (data.pricemodels?.nodes ?? []).filter((n: any) => isSiteMatch(n?.site));
+  const dataForCategories = {
+    ...data,
+    devicecategories: {
+      nodes: (data.devicecategories?.nodes ?? []).filter((n: any) => isSiteMatch(n?.site)),
+    },
+  };
+  const categories = getCategoriesFromHub(dataForCategories);
 
   // ✅ internal linking hub (เลือกชุด “ล่าสุด/มีอยู่จริง” ก่อน)
   const topServices = takePublished(servicesAll, 8);

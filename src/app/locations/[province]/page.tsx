@@ -12,6 +12,7 @@ import { locationFaqSeed } from "@/lib/seoLocation";
 import { relatedByCategory } from "@/lib/related";
 import { stripHtml } from "@/lib/shared";
 import { BackToTop } from "@/components/BackToTop";
+import { getSiteKey, isSiteMatch } from "@/lib/site-key";
 
 export const revalidate = 86400; // 24 ชม. — กัน WP ล่มตอน ISR
 export const dynamicParams = true; // Allow dynamic routes for new location pages
@@ -42,12 +43,12 @@ export async function generateMetadata({
   if (!slug) return {};
   try {
     const one = await fetchGql<any>(Q_LOCATION_BY_SLUG, { slug }, { revalidate: 86400 });
-    let loc = (one?.locationpages?.nodes ?? [])[0];
+    let loc = (one?.locationpages?.nodes ?? []).find((n: any) => String(n?.slug || "").toLowerCase() === slug.toLowerCase());
     if (!loc?.slug) {
       const data = await getCachedLocationpagesList();
       loc = (data?.locationpages?.nodes ?? []).find((n: any) => String(n?.slug || "").toLowerCase() === slug.toLowerCase());
     }
-    if (!loc || !isPublish(loc?.status)) return {};
+    if (!loc || !isPublish(loc?.status) || !isSiteMatch(loc?.site)) return {};
     const pathname = `/locations/${loc.slug}`;
     const fallback = `พื้นที่บริการรับซื้อโน๊ตบุ๊คและอุปกรณ์ไอที ${[loc.province, loc.district].filter(Boolean).join(" ")} • ประเมินไว นัดรับถึงที่ จ่ายทันที LINE @webuy`;
     const description = inferDescriptionFromHtml(loc.content, fallback);
@@ -80,7 +81,7 @@ export default async function Page({
   try {
     const one = await fetchGql<any>(Q_LOCATION_BY_SLUG, { slug }, { revalidate: 86400 });
     const node = (one?.locationpages?.nodes ?? [])[0];
-    if (node && isPublish(node?.status) && String(node?.slug || "").toLowerCase() === String(slug).toLowerCase()) {
+    if (node && isPublish(node?.status) && isSiteMatch(node?.site) && String(node?.slug || "").toLowerCase() === String(slug).toLowerCase()) {
       location = node;
     }
   } catch (_) {
@@ -91,7 +92,7 @@ export default async function Page({
     try {
       const data = await getCachedLocationpagesList();
       const nodes = data?.locationpages?.nodes ?? [];
-      location = nodes.find((n: any) => String(n?.slug || "").toLowerCase() === String(slug).toLowerCase());
+      location = nodes.find((n: any) => isSiteMatch(n?.site) && String(n?.slug || "").toLowerCase() === String(slug).toLowerCase());
       if (location && !isPublish(location?.status)) location = null;
     } catch (error) {
       console.error("Error fetching location list:", slug, error);
@@ -112,7 +113,7 @@ export default async function Page({
           status: "publish",
           province: slugNode.province ?? slugToTitle(slug),
           district: slugNode.district ?? null,
-          site: slugNode.site ?? "webuy",
+          site: slugNode.site ?? getSiteKey(),
           devicecategories: { nodes: slugNode.devicecategories?.nodes ?? [] },
         };
       }
@@ -128,7 +129,14 @@ export default async function Page({
   const emptyIndex = { services: { nodes: [] as any[] }, locationpages: { nodes: [] as any[] }, pricemodels: { nodes: [] as any[] }, devicecategories: { nodes: [] as any[] } };
   try {
     const raw = await fetchGql<any>(Q_HUB_INDEX, undefined, { revalidate });
-    index = raw ?? emptyIndex;
+    const r = raw ?? emptyIndex;
+    index = {
+      services: { nodes: (r.services?.nodes ?? []).filter((n: any) => isSiteMatch(n?.site)) },
+      locationpages: { nodes: (r.locationpages?.nodes ?? []).filter((n: any) => isSiteMatch(n?.site)) },
+      pricemodels: { nodes: (r.pricemodels?.nodes ?? []).filter((n: any) => isSiteMatch(n?.site)) },
+      devicecategories: { nodes: (r.devicecategories?.nodes ?? []).filter((n: any) => isSiteMatch(n?.site)) },
+      faqs: r.faqs ? { nodes: (r.faqs?.nodes ?? []).filter((n: any) => isSiteMatch(n?.site)) } : undefined,
+    };
   } catch (error) {
     console.error('Error fetching hub index:', error);
     index = emptyIndex;
