@@ -11,8 +11,8 @@ import {
 import { isSiteMatch } from "@/lib/site-key";
 
 export const SITEMAP_REVALIDATE = 86400;
-/** สั้นมาก — ให้ตอบภายใน ~2s เพื่อ Google ไม่ timeout (ดึงข้อมูลได้) */
-const SITEMAP_WP_TIMEOUT_MS = 2000;
+/** Timeout การดึง WP ตอน build sitemap — ตั้ง env SITEMAP_WP_TIMEOUT_MS ได้ (default 8s เพื่อให้ WP มีเวลาโหลด) */
+const SITEMAP_WP_TIMEOUT_MS = Number(process.env.SITEMAP_WP_TIMEOUT_MS) || 8000;
 
 function isPublish(status: any) {
   return String(status || "").toLowerCase() === "publish";
@@ -62,9 +62,12 @@ export async function getSitemapEntries(): Promise<SitemapEntry[]> {
     const timeoutPromise = new Promise<never>((_, reject) =>
       setTimeout(() => reject(new Error("sitemap WP timeout")), SITEMAP_WP_TIMEOUT_MS)
     );
-    [svc, loc, pri, cat] = await Promise.race([wpPromise, timeoutPromise]);
-  } catch {
-    // WP ล้ม/ช้า
+    const result = await Promise.race([wpPromise, timeoutPromise]);
+    [svc, loc, pri, cat] = result;
+  } catch (err) {
+    if (process.env.NODE_ENV !== "production") {
+      console.warn("[sitemap] WP fetch failed, using static pages only:", (err as Error)?.message ?? err);
+    }
   }
 
   for (const n of svc?.services?.nodes ?? []) {

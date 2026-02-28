@@ -23,3 +23,13 @@
 4. **ถ้ายังไม่ได้**
    - ตรวจว่าไม่มี firewall/CDN บล็อก Googlebot
    - ลองส่งด้วย URL มี slash ท้าย: `https://winnerit.in.th/sitemap.xml/`
+
+## ถ้า Sitemap มีแค่ 5 หน้า (static เท่านั้น)
+
+แปลว่าส่วนที่ดึงจาก WordPress ไม่ถูกเพิ่ม — มักเป็นเพราะ **WP ล้ม / timeout / 403** ตอนที่สร้าง sitemap
+
+1. **ตรวจ WP**
+   - ตั้ง `WPGRAPHQL_ENDPOINT` (หรือ `WP_GRAPHQL_URL`) ให้ชี้ไปที่ GraphQL จริง และให้ Vercel/server ดึงได้ (ไม่บล็อก IP)
+   - ถ้า WP ช้า: ตั้ง env **`SITEMAP_WP_TIMEOUT_MS`** = `10000` (10 วินาที) หรือมากกว่า แล้ว redeploy
+
+2. **ค่าเริ่มต้น timeout** ในโค้ดคือ 8 วินาที (เดิม 2 วินาที) — ถ้ายังไม่พอให้เพิ่มผ่าน env ด้านบน
