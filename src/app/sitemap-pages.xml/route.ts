@@ -9,7 +9,6 @@ export const runtime = "edge";
 const HEADERS = {
   "Content-Type": "application/xml; charset=utf-8",
   "Cache-Control": "public, max-age=3600, s-maxage=3600",
-  
 } as const;
 
 export async function GET() {
