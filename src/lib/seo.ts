@@ -41,6 +41,10 @@ export function baseMetadata(): Metadata {
       default: "Winner IT",
       template: "%s | Winner IT",
     },
+    icons: {
+      icon: "/favicon.png",
+      apple: "/favicon.png",
+    },
     description:
       "รับซื้อโน๊ตบุ๊ค MacBook PC อุปกรณ์ไอที ทุกยี่ห้อ ทุกสภาพ ให้ราคาสูง นัดรับถึงบ้าน จ่ายเงินสด ทั่วไทย | Winner IT",
     alternates: { canonical: "/" },
