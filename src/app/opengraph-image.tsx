@@ -2,6 +2,7 @@ import { siteUrl } from "@/lib/wp";
 import { renderOgImage } from "@/lib/og";
 
 export const runtime = "edge";
+export const revalidate = 86400; // cache OG 24h — ลด CPU จาก bot/share
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 

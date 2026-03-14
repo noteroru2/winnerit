@@ -1,6 +1,7 @@
 import { siteUrl } from "@/lib/wp";
 import { renderOgImage, clampText } from "@/lib/og";
 
+export const revalidate = 86400; // cache OG 24h — ลด CPU
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
