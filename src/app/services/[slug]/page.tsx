@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { cache } from "react";
 import { notFound } from "next/navigation";
 import { siteUrl, nodeCats } from "@/lib/wp";
 import { getCachedServiceBySlug, getCachedServiceRelatedIndex, getCachedServiceSlugs } from "@/lib/wp-cache";
@@ -35,6 +36,7 @@ function toHtml(x: any) {
   return String(x ?? "").trim();
 }
 
+/** Request-deduped: metadata และ page เรียกตัวนี้ — ยิง WP แค่ครั้งเดียวต่อ request */
 async function getServiceOrNull(slug: string) {
   const s = String(slug || "").trim();
   if (!s) return null;
@@ -56,6 +58,7 @@ async function getServiceOrNull(slug: string) {
   if (!isSiteMatch(node?.site)) return null;
   return node;
 }
+const getService = cache(getServiceOrNull);
 
 function pickPrimaryCategory(service: any) {
   const cats = service?.devicecategories?.nodes ?? [];
@@ -68,7 +71,7 @@ export async function generateMetadata({ params }: { params: { slug: string } })
   const slug = String(params.slug || "").trim();
   if (!slug) return {};
   try {
-    const service: any = await getServiceOrNull(slug);
+    const service: any = await getService(slug);
     if (!service) return {};
     const pathname = `/services/${service.slug}`;
     const fallback = "บริการรับซื้อสินค้าไอที ประเมินไว นัดรับถึงที่ และจ่ายทันทีผ่าน LINE @webuy";
@@ -88,7 +91,7 @@ export default async function Page({ params }: { params: { slug: string } }) {
   const slug = String(params.slug || "").trim();
   if (!slug) notFound();
 
-  const service = await getServiceOrNull(slug);
+  const service = await getService(slug);
   if (!service) notFound();
 
   const emptyIndex = { locationpages: { nodes: [] as any[] }, pricemodels: { nodes: [] as any[] } };

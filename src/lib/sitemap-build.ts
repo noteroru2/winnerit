@@ -1,15 +1,18 @@
 /**
  * Logic สำหรับ build รายการ sitemap — ใช้ทั้ง metadata sitemap และ route ที่ส่ง XML พร้อม declaration
+ * ใช้ getCached* จาก wp-cache เพื่อแชร์ cache กับหน้าอื่น (ลด query ซ้ำ)
  */
 import { fetchGql, siteUrl } from "@/lib/wp";
 import {
-  Q_SERVICE_SLUGS,
+  getCachedServiceSlugs,
+  getCachedLocationSlugs,
+  getCachedPriceSlugs,
+  getCachedCategorySlugs,
+} from "@/lib/wp-cache";
+import {
   Q_SERVICE_SLUGS_PAGINATED,
-  Q_LOCATION_SLUGS,
   Q_LOCATION_SLUGS_PAGINATED,
-  Q_PRICE_SLUGS,
   Q_PRICE_SLUGS_PAGINATED,
-  Q_DEVICECATEGORY_SLUGS,
   Q_DEVICECATEGORY_SLUGS_PAGINATED,
 } from "@/lib/queries";
 import { isSiteMatch } from "@/lib/site-key";
@@ -62,10 +65,10 @@ export async function getSitemapEntries(): Promise<SitemapEntry[]> {
   let cat: any = null;
   try {
     const wpPromise = Promise.all([
-      fetchGql<any>(Q_SERVICE_SLUGS, undefined, { revalidate: SITEMAP_REVALIDATE }),
-      fetchGql<any>(Q_LOCATION_SLUGS, undefined, { revalidate: SITEMAP_REVALIDATE }),
-      fetchGql<any>(Q_PRICE_SLUGS, undefined, { revalidate: SITEMAP_REVALIDATE }),
-      fetchGql<any>(Q_DEVICECATEGORY_SLUGS, undefined, { revalidate: SITEMAP_REVALIDATE }),
+      getCachedServiceSlugs(),
+      getCachedLocationSlugs(),
+      getCachedPriceSlugs(),
+      getCachedCategorySlugs(),
     ]);
     const timeoutPromise = new Promise<never>((_, reject) =>
       setTimeout(() => reject(new Error("sitemap WP timeout")), SITEMAP_WP_TIMEOUT_MS)

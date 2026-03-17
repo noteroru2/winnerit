@@ -1,9 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { cache } from "react";
 import { notFound } from "next/navigation";
-import { fetchGql, siteUrl, nodeCats } from "@/lib/wp";
-import { getCachedLocationpagesList } from "@/lib/wp-cache";
-import { Q_HUB_INDEX, Q_LOCATION_SLUGS, Q_LOCATION_BY_SLUG, Q_SITE_SETTINGS } from "@/lib/queries";
+import { siteUrl, nodeCats } from "@/lib/wp";
+import {
+  getCachedLocationBySlug,
+  getCachedLocationpagesList,
+  getCachedLocationSlugs,
+  getCachedHubIndex,
+  getCachedSiteSettings,
+} from "@/lib/wp-cache";
 import JsonLd from "@/components/JsonLd";
 import { jsonLdBreadcrumb, jsonLdLocalBusiness, jsonLdFaqPage, jsonLdArticle, jsonLdHowTo, jsonLdServiceLocation } from "@/lib/jsonld";
 import { addInternalLinks, buildLocationInternalLinks } from "@/lib/internal-links";
@@ -34,6 +40,44 @@ export async function generateStaticParams() {
   return [];
 }
 
+/** Request-deduped: metadata และ page ใช้ตัวนี้ — ยิง WP แค่ครั้งเดียวต่อ request */
+async function getLocationOrNull(slug: string) {
+  const s = String(slug || "").trim();
+  if (!s) return null;
+  try {
+    const one = await getCachedLocationBySlug(s);
+    const node = (one?.locationpages?.nodes ?? [])[0];
+    if (node && isPublish(node?.status) && isSiteMatch(node?.site) && String(node?.slug || "").toLowerCase() === s.toLowerCase()) {
+      return node;
+    }
+  } catch (_) {}
+  try {
+    const data = await getCachedLocationpagesList();
+    const loc = (data?.locationpages?.nodes ?? []).find((n: any) => isSiteMatch(n?.site) && String(n?.slug || "").toLowerCase() === s.toLowerCase());
+    if (loc && isPublish(loc?.status)) return loc;
+  } catch (_) {}
+  try {
+    const slugData = await getCachedLocationSlugs();
+    const slugNode = (slugData?.locationpages?.nodes ?? []).find(
+      (n: any) => String(n?.slug || "").toLowerCase() === s.toLowerCase() && isPublish(n?.status)
+    );
+    if (slugNode) {
+      return {
+        slug: slugNode.slug ?? s,
+        title: slugNode.title ?? slugToTitle(s),
+        content: (slugNode as any).content ?? "",
+        status: "publish",
+        province: slugNode.province ?? slugToTitle(s),
+        district: slugNode.district ?? null,
+        site: slugNode.site ?? getSiteKey(),
+        devicecategories: { nodes: (slugNode as any).devicecategories?.nodes ?? [] },
+      };
+    }
+  } catch (_) {}
+  return null;
+}
+const getLocation = cache(getLocationOrNull);
+
 export async function generateMetadata({
   params,
 }: {
@@ -42,13 +86,8 @@ export async function generateMetadata({
   const slug = String(params?.province ?? "").trim();
   if (!slug) return {};
   try {
-    const one = await fetchGql<any>(Q_LOCATION_BY_SLUG, { slug }, { revalidate: 86400 });
-    let loc = (one?.locationpages?.nodes ?? []).find((n: any) => String(n?.slug || "").toLowerCase() === slug.toLowerCase());
-    if (!loc?.slug) {
-      const data = await getCachedLocationpagesList();
-      loc = (data?.locationpages?.nodes ?? []).find((n: any) => String(n?.slug || "").toLowerCase() === slug.toLowerCase());
-    }
-    if (!loc || !isPublish(loc?.status) || !isSiteMatch(loc?.site)) return {};
+    const loc = await getLocation(slug);
+    if (!loc) return {};
     const pathname = `/locations/${loc.slug}`;
     const fallback = `พื้นที่บริการรับซื้อโน๊ตบุ๊คและอุปกรณ์ไอที ${[loc.province, loc.district].filter(Boolean).join(" ")} • ประเมินไว นัดรับถึงที่ จ่ายทันที LINE @webuy`;
     const description = inferDescriptionFromHtml(loc.content, fallback);
@@ -58,7 +97,7 @@ export async function generateMetadata({
       pathname,
     });
   } catch (error) {
-    console.error('Error generating metadata for location:', slug, error);
+    console.error("Error generating metadata for location:", slug, error);
     return {};
   }
 }
@@ -75,80 +114,28 @@ export default async function Page({
   const slug = String(params?.province ?? "").trim();
   if (!slug) notFound();
 
-  let location: any = null;
-
-  // ลองดึงแค่ 1 location ตาม slug ก่อน (เบา — ไม่โหลด 1000 รายการพร้อม content)
-  try {
-    const one = await fetchGql<any>(Q_LOCATION_BY_SLUG, { slug }, { revalidate: 86400 });
-    const node = (one?.locationpages?.nodes ?? [])[0];
-    if (node && isPublish(node?.status) && isSiteMatch(node?.site) && String(node?.slug || "").toLowerCase() === String(slug).toLowerCase()) {
-      location = node;
-    }
-  } catch (_) {
-    // schema อาจไม่รองรับ where: { name } — ใช้ fallback
-  }
-
-  if (!location) {
-    try {
-      const data = await getCachedLocationpagesList();
-      const nodes = data?.locationpages?.nodes ?? [];
-      location = nodes.find((n: any) => isSiteMatch(n?.site) && String(n?.slug || "").toLowerCase() === String(slug).toLowerCase());
-      if (location && !isPublish(location?.status)) location = null;
-    } catch (error) {
-      console.error("Error fetching location list:", slug, error);
-    }
-  }
-
-  if (!location) {
-    try {
-      const slugData = await fetchGql<any>(Q_LOCATION_SLUGS, undefined, { revalidate: 3600 });
-      const slugNode = (slugData?.locationpages?.nodes ?? []).find(
-        (n: any) => String(n?.slug || "").toLowerCase() === String(slug).toLowerCase() && isPublish(n?.status)
-      );
-      if (slugNode) {
-        location = {
-          slug: slugNode.slug ?? slug,
-          title: slugNode.title ?? slugToTitle(slug),
-          content: slugNode.content ?? "",
-          status: "publish",
-          province: slugNode.province ?? slugToTitle(slug),
-          district: slugNode.district ?? null,
-          site: slugNode.site ?? getSiteKey(),
-          devicecategories: { nodes: slugNode.devicecategories?.nodes ?? [] },
-        };
-      }
-    } catch (e) {
-      console.error("Fallback Q_LOCATION_SLUGS failed:", slug, e);
-    }
-  }
-
+  const location = await getLocation(slug);
   if (!location) notFound();
 
-  let index;
-
   const emptyIndex = { services: { nodes: [] as any[] }, locationpages: { nodes: [] as any[] }, pricemodels: { nodes: [] as any[] }, devicecategories: { nodes: [] as any[] } };
+  let index = emptyIndex;
   try {
-    const raw = await fetchGql<any>(Q_HUB_INDEX, undefined, { revalidate });
-    const r = raw ?? emptyIndex;
+    const r = (await getCachedHubIndex()) ?? emptyIndex;
     index = {
       services: { nodes: (r.services?.nodes ?? []).filter((n: any) => isSiteMatch(n?.site)) },
       locationpages: { nodes: (r.locationpages?.nodes ?? []).filter((n: any) => isSiteMatch(n?.site)) },
       pricemodels: { nodes: (r.pricemodels?.nodes ?? []).filter((n: any) => isSiteMatch(n?.site)) },
       devicecategories: { nodes: (r.devicecategories?.nodes ?? []).filter((n: any) => isSiteMatch(n?.site)) },
-      faqs: r.faqs ? { nodes: (r.faqs?.nodes ?? []).filter((n: any) => isSiteMatch(n?.site)) } : undefined,
     };
   } catch (error) {
-    console.error('Error fetching hub index:', error);
-    index = emptyIndex;
+    console.error("Error fetching hub index:", error);
   }
 
   let sitePage = {};
   try {
-    const siteData = await fetchGql<any>(Q_SITE_SETTINGS, undefined, { revalidate: 3600 });
+    const siteData = await getCachedSiteSettings();
     sitePage = siteData?.page ?? {};
-  } catch {
-    // fallback
-  }
+  } catch {}
 
   return <LocationPage location={location} index={index} sitePage={sitePage} />;
 }

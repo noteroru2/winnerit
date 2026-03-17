@@ -1,5 +1,5 @@
 import { siteUrl } from "@/lib/wp";
-import { getCachedServicesList } from "@/lib/wp-cache";
+import { getCachedServiceBySlug } from "@/lib/wp-cache";
 import { stripHtml } from "@/lib/shared";
 import { renderOgImage, clampText } from "@/lib/og";
 
@@ -20,8 +20,8 @@ export default async function Image({
   let chips: string[] = ["บริการรับซื้อ", "ประเมินไว", "นัดรับถึงที่"];
 
   try {
-    const data = await getCachedServicesList();
-    const service = (data?.services?.nodes ?? []).find((n: any) => String(n?.slug || "").toLowerCase() === slug.toLowerCase());
+    const data = await getCachedServiceBySlug(slug);
+    const service = (data?.services?.nodes ?? [])[0];
     if (service?.title) title = String(service.title);
     const text = stripHtml(String(service?.content ?? ""));
     if (text) desc = clampText(text, 160);

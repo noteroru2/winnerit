@@ -1,8 +1,8 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { fetchGql, siteUrl } from "@/lib/wp";
-import { getCachedPricemodelsList } from "@/lib/wp-cache";
-import { Q_HUB_INDEX, Q_PRICE_BY_SLUG } from "@/lib/queries";
+import { cache } from "react";
+import { siteUrl } from "@/lib/wp";
+import { getCachedPricemodelsList, getCachedPriceBySlug, getCachedHubIndex } from "@/lib/wp-cache";
 import { relatedByCategory } from "@/lib/related";
 import { JsonLd } from "@/components/JsonLd";
 import { jsonLdProductOffer, jsonLdBreadcrumb } from "@/lib/jsonld";
@@ -31,37 +31,44 @@ function pickPrimaryCategory(node: any) {
   return withDesc || cats[0];
 }
 
+/** Request-deduped: metadata และ page ใช้ตัวนี้ */
+async function getPriceOrNull(slug: string) {
+  const s = String(slug || "").trim().toLowerCase();
+  if (!s) return null;
+  const data = await getCachedPricemodelsList();
+  let price: any = (data?.pricemodels?.nodes ?? []).find(
+    (n: any) => isSiteMatch(n?.site) && String(n?.slug || "").toLowerCase() === s
+  );
+  if (!price) {
+    const bySlug = await getCachedPriceBySlug(s);
+    const node = (bySlug?.pricemodels?.nodes ?? [])[0];
+    if (node && isSiteMatch(node?.site)) price = node;
+  }
+  if (!price || String(price?.status || "").toLowerCase() !== "publish") return null;
+  return price;
+}
+const getPrice = cache(getPriceOrNull);
+
 export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
   const slug = String(params.slug || "").trim();
   if (!slug) return {};
-
   try {
-    let price: any = (await getCachedPricemodelsList())?.pricemodels?.nodes?.find(
-      (n: any) => isSiteMatch(n?.site) && String(n?.slug || "").toLowerCase() === String(slug).toLowerCase()
-    );
-    if (!price) {
-      const bySlug = await fetchGql<{ pricemodels?: { nodes?: any[] } }>(Q_PRICE_BY_SLUG, { slug }, { revalidate: 3600 });
-      const node = bySlug?.pricemodels?.nodes?.[0];
-      if (node && isSiteMatch(node?.site)) price = node;
-    }
-    if (!price || String(price?.status || "").toLowerCase() !== "publish") return {};
-
+    const price = await getPrice(slug);
+    if (!price) return {};
     const pathname = `/prices/${price.slug}`;
     const range =
       price.buyPriceMin != null && price.buyPriceMax != null
         ? `ช่วงรับซื้อประมาณ ${price.buyPriceMin}-${price.buyPriceMax} บาท`
         : "ช่วงราคารับซื้อโดยประมาณ";
-
     const fallback = `${price.title || "รุ่นสินค้า"} • ${range} (ขึ้นอยู่กับสภาพ/อุปกรณ์/ประกัน) ติดต่อ LINE @webuy เพื่อประเมินจริง`;
     const desc = inferDescriptionFromHtml(price.content, fallback);
-
     return pageMetadata({
       title: price.title || "รุ่น/ช่วงราคารับซื้อ",
       description: desc,
       pathname,
     });
   } catch (error) {
-    console.error('Error generating metadata for price:', slug, error);
+    console.error("Error generating metadata for price:", slug, error);
     return {};
   }
 }
@@ -70,34 +77,20 @@ export default async function Page({ params }: { params: { slug: string } }) {
   const slug = String(params.slug || "").trim();
   if (!slug) notFound();
 
-  let price: any = null;
-  let index;
-
-  try {
-    const data = await getCachedPricemodelsList();
-    price = (data?.pricemodels?.nodes ?? []).find((n: any) => isSiteMatch(n?.site) && String(n?.slug || "").toLowerCase() === String(slug).toLowerCase());
-    if (!price) {
-      const bySlug = await fetchGql<{ pricemodels?: { nodes?: any[] } }>(Q_PRICE_BY_SLUG, { slug }, { revalidate: 3600 });
-      const node = bySlug?.pricemodels?.nodes?.[0];
-      if (node && String(node?.status || "").toLowerCase() === "publish" && isSiteMatch(node?.site)) price = node;
-    }
-    if (!price) notFound();
-  } catch (error) {
-    console.error("Error fetching price:", slug, error);
-    notFound();
-  }
+  const price = await getPrice(slug);
+  if (!price) notFound();
 
   const emptyIndex = { services: { nodes: [] as any[] }, locationpages: { nodes: [] as any[] }, pricemodels: { nodes: [] as any[] } };
+  let index = emptyIndex;
   try {
-    const raw = await fetchGql<any>(Q_HUB_INDEX, undefined, { revalidate: 3600 });
-    const r = raw ?? emptyIndex;
+    const r = (await getCachedHubIndex()) ?? emptyIndex;
     index = {
       services: { nodes: (r.services?.nodes ?? []).filter((n: any) => isSiteMatch(n?.site)) },
       locationpages: { nodes: (r.locationpages?.nodes ?? []).filter((n: any) => isSiteMatch(n?.site)) },
       pricemodels: { nodes: (r.pricemodels?.nodes ?? []).filter((n: any) => isSiteMatch(n?.site)) },
     };
   } catch (error) {
-    console.error('Error fetching hub index:', error);
+    console.error("Error fetching hub index:", error);
     index = emptyIndex;
   }
 

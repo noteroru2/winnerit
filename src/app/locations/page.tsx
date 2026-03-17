@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { pageMetadata } from "@/lib/seo";
-import { fetchGql } from "@/lib/wp";
-import { Q_LOCATION_SLUGS } from "@/lib/queries";
+import { getCachedLocationSlugs } from "@/lib/wp-cache";
 import { BUSINESS_INFO } from "@/lib/constants";
 import { isSiteMatch } from "@/lib/site-key";
 
@@ -23,7 +22,7 @@ export default async function Page() {
   let locations: any[] = [];
 
   try {
-    const data = await fetchGql<any>(Q_LOCATION_SLUGS, undefined, { revalidate: 86400 });
+    const data = await getCachedLocationSlugs();
     const nodes = (data?.locationpages?.nodes ?? [])
       .filter((n: any) => {
         if (!n?.slug || !isPublish(n?.status)) return false;

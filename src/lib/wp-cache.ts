@@ -11,9 +11,16 @@ import {
   Q_SERVICE_SLUGS,
   Q_SERVICE_BY_SLUG,
   Q_LOCATIONPAGES_LIST,
+  Q_LOCATION_SLUGS,
+  Q_LOCATION_BY_SLUG,
   Q_PRICEMODELS_LIST,
+  Q_PRICE_BY_SLUG,
   Q_HUB_INDEX,
   Q_SERVICE_RELATED_INDEX,
+  Q_DEVICECATEGORY_BY_SLUG,
+  Q_DEVICECATEGORY_SLUGS,
+  Q_PRICE_SLUGS,
+  Q_SITE_SETTINGS,
 } from "@/lib/queries";
 
 const CACHE_TAG = "wp-lists";
@@ -80,6 +87,72 @@ export async function getCachedPricemodelsList() {
   return unstable_cache(
     async () => fetchGql<any>(Q_PRICEMODELS_LIST, undefined, { revalidate: REVALIDATE }),
     cacheKey("pricemodels"),
+    { revalidate: REVALIDATE, tags: [CACHE_TAG, "wp"] }
+  )();
+}
+
+/** Cached location by slug — ใช้ทั้ง metadata และ page (dedupe ต่อ request ได้กับ React cache()) */
+export async function getCachedLocationBySlug(slug: string) {
+  const s = String(slug || "").trim().toLowerCase();
+  return unstable_cache(
+    async () => fetchGql<any>(Q_LOCATION_BY_SLUG, { slug: s }, { revalidate: REVALIDATE }),
+    cacheKey("location-by-slug", s),
+    { revalidate: REVALIDATE, tags: [CACHE_TAG, "wp"] }
+  )();
+}
+
+/** Cached location slugs (เบา) — ใช้ validate / fallback ใน location page */
+export async function getCachedLocationSlugs() {
+  return unstable_cache(
+    async () => fetchGql<any>(Q_LOCATION_SLUGS, undefined, { revalidate: REVALIDATE }),
+    cacheKey("location-slugs"),
+    { revalidate: REVALIDATE, tags: [CACHE_TAG, "wp"] }
+  )();
+}
+
+/** Cached category by slug — ใช้ทั้ง metadata และ page */
+export async function getCachedCategoryBySlug(slug: string) {
+  const s = String(slug || "").trim();
+  return unstable_cache(
+    async () => fetchGql<any>(Q_DEVICECATEGORY_BY_SLUG, { slug: s }, { revalidate: REVALIDATE }),
+    cacheKey("category-by-slug", s),
+    { revalidate: REVALIDATE, tags: [CACHE_TAG, "wp"] }
+  )();
+}
+
+/** Cached price by slug — ใช้ทั้ง metadata และ page */
+export async function getCachedPriceBySlug(slug: string) {
+  const s = String(slug || "").trim().toLowerCase();
+  return unstable_cache(
+    async () => fetchGql<any>(Q_PRICE_BY_SLUG, { slug: s }, { revalidate: REVALIDATE }),
+    cacheKey("price-by-slug", s),
+    { revalidate: REVALIDATE, tags: [CACHE_TAG, "wp"] }
+  )();
+}
+
+/** Cached site settings — ใช้ใน location page (LocalBusiness JSON-LD) */
+export async function getCachedSiteSettings() {
+  return unstable_cache(
+    async () => fetchGql<any>(Q_SITE_SETTINGS, undefined, { revalidate: REVALIDATE }),
+    cacheKey("site-settings"),
+    { revalidate: REVALIDATE, tags: [CACHE_TAG, "wp"] }
+  )();
+}
+
+/** Cached price slugs (เบา) — ใช้ใน sitemap */
+export async function getCachedPriceSlugs() {
+  return unstable_cache(
+    async () => fetchGql<any>(Q_PRICE_SLUGS, undefined, { revalidate: REVALIDATE }),
+    cacheKey("price-slugs"),
+    { revalidate: REVALIDATE, tags: [CACHE_TAG, "wp"] }
+  )();
+}
+
+/** Cached category slugs (เบา) — ใช้ใน sitemap */
+export async function getCachedCategorySlugs() {
+  return unstable_cache(
+    async () => fetchGql<any>(Q_DEVICECATEGORY_SLUGS, undefined, { revalidate: REVALIDATE }),
+    cacheKey("category-slugs"),
     { revalidate: REVALIDATE, tags: [CACHE_TAG, "wp"] }
   )();
 }
