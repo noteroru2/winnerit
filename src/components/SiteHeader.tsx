@@ -3,12 +3,13 @@ import Link from "next/link";
 import { useState } from "react";
 import { BUSINESS_INFO } from "@/lib/constants";
 
-const NAV = [
+type NavItem = { href: string; label: string; isAnchor?: boolean };
+const NAV: NavItem[] = [
   { href: "/", label: "หน้าแรก" },
   { href: "/categories", label: "สินค้าที่รับซื้อ" },
   { href: "/locations", label: "พื้นที่บริการ" },
   { href: "#contact", label: "ติดต่อเรา", isAnchor: true },
-] as const;
+];
 
 export function SiteHeader({ brand = "Winner IT" }: { brand?: string }) {
   const [open, setOpen] = useState(false);
