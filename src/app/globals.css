@@ -114,7 +114,7 @@
 
   /* FAQ */
   .faq {
-    @apply rounded-2xl border border-slate-200 bg-white p-5 transition-colors hover:border-slate-300 group;
+    @apply rounded-2xl border border-slate-200 bg-white p-5 transition-colors hover:border-slate-300;
   }
   .faq summary {
     @apply cursor-pointer text-sm font-semibold text-slate-800 list-none flex items-center gap-2;
