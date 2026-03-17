@@ -18,7 +18,11 @@ module.exports = {
         },
       },
       boxShadow: {
-        soft: "0 12px 36px rgba(2, 6, 23, 0.10)",
+        soft: "0 2px 16px rgba(0,0,0,0.06)",
+        glow: "0 4px 24px rgba(249,115,22,0.15)",
+      },
+      borderRadius: {
+        "4xl": "2rem",
       },
     },
   },
