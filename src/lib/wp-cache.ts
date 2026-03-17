@@ -8,6 +8,8 @@ import { fetchGql } from "@/lib/wp";
 import { getSiteKey } from "@/lib/site-key";
 import {
   Q_SERVICES_LIST,
+  Q_SERVICE_SLUGS,
+  Q_SERVICE_BY_SLUG,
   Q_LOCATIONPAGES_LIST,
   Q_PRICEMODELS_LIST,
   Q_HUB_INDEX,
@@ -33,6 +35,25 @@ export async function getCachedServicesList() {
   return unstable_cache(
     async () => fetchGql<any>(Q_SERVICES_LIST, undefined, { revalidate: REVALIDATE }),
     cacheKey("services"),
+    { revalidate: REVALIDATE, tags: [CACHE_TAG, "wp"] }
+  )();
+}
+
+/** Lightweight cached slugs for validation & static params (no content) */
+export async function getCachedServiceSlugs() {
+  return unstable_cache(
+    async () => fetchGql<any>(Q_SERVICE_SLUGS, undefined, { revalidate: REVALIDATE }),
+    cacheKey("service-slugs"),
+    { revalidate: REVALIDATE, tags: [CACHE_TAG, "wp"] }
+  )();
+}
+
+/** Cached fetch for a single service by slug (avoids downloading the full list) */
+export async function getCachedServiceBySlug(slug: string) {
+  const s = String(slug || "").trim().toLowerCase();
+  return unstable_cache(
+    async () => fetchGql<any>(Q_SERVICE_BY_SLUG, { slug: s }, { revalidate: REVALIDATE }),
+    cacheKey("service-by-slug", s),
     { revalidate: REVALIDATE, tags: [CACHE_TAG, "wp"] }
   )();
 }

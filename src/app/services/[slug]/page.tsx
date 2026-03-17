@@ -1,9 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { fetchGql, siteUrl, nodeCats } from "@/lib/wp";
-import { getCachedServicesList } from "@/lib/wp-cache";
-import { Q_HUB_INDEX, Q_SERVICE_BY_SLUG } from "@/lib/queries";
+import { siteUrl, nodeCats } from "@/lib/wp";
+import { getCachedHubIndex, getCachedServiceBySlug, getCachedServiceSlugs } from "@/lib/wp-cache";
 import { relatedByCategory } from "@/lib/related";
 import { JsonLd } from "@/components/JsonLd";
 import { jsonLdFaqPage } from "@/lib/jsonld";
@@ -19,12 +18,52 @@ export const dynamicParams = true;
 
 /** ไม่ SSG ตอน build — ทุก service เป็น ISR (build เร็ว) */
 export async function generateStaticParams() {
-  return [];
+  // ใช้ list ที่เบา (slug-only) เพื่อ pre-render บางส่วนได้ และใช้ validate slug ได้เร็ว
+  try {
+    const data = await getCachedServiceSlugs();
+    const nodes = (data?.services?.nodes ?? []) as any[];
+    const slugs = nodes
+      .filter((n) => isSiteMatch(n?.site) && String(n?.status || "").toLowerCase() === "publish")
+      .map((n) => String(n?.slug || "").trim())
+      .filter(Boolean);
+
+    // กัน build หนักเกินไปถ้า WP มี slug เยอะมาก
+    return slugs.slice(0, 300).map((slug) => ({ slug }));
+  } catch {
+    return [];
+  }
 }
 
 function toHtml(x: any) {
   const s = String(x ?? "");
   return s.trim();
+}
+
+async function getServiceOrNull(slug: string) {
+  const s = String(slug || "").trim();
+  if (!s) return null;
+
+  // 404 ให้เร็วด้วย slug list (ไม่โหลด content)
+  try {
+    const data = await getCachedServiceSlugs();
+    const nodes = (data?.services?.nodes ?? []) as any[];
+    const hit = nodes.find(
+      (n: any) =>
+        isSiteMatch(n?.site) &&
+        String(n?.status || "").toLowerCase() === "publish" &&
+        String(n?.slug || "").toLowerCase() === s.toLowerCase()
+    );
+    if (!hit) return null;
+  } catch {
+    // ถ้า slug list ล้ม ให้ไป fetch by slug ต่อ (ยัง cache อยู่)
+  }
+
+  const bySlug = await getCachedServiceBySlug(s);
+  const node = (bySlug?.services?.nodes ?? [])[0];
+  if (!node) return null;
+  if (String(node?.status || "").toLowerCase() !== "publish") return null;
+  if (!isSiteMatch(node?.site)) return null;
+  return node;
 }
 
 function pickPrimaryCategory(service: any) {
@@ -40,14 +79,8 @@ export async function generateMetadata({ params }: { params: { slug: string } })
   if (!slug) return {};
 
   try {
-    let service: any = (await getCachedServicesList())?.services?.nodes?.find(
-      (n: any) => String(n?.slug || "").toLowerCase() === String(slug).toLowerCase()
-    );
-    if (!service) {
-      const bySlug = await fetchGql<{ services?: { nodes?: any[] } }>(Q_SERVICE_BY_SLUG, { slug }, { revalidate: 3600 });
-      service = bySlug?.services?.nodes?.[0];
-    }
-    if (!service || String(service?.status || "").toLowerCase() !== "publish") return {};
+    const service: any = await getServiceOrNull(slug);
+    if (!service) return {};
 
     const pathname = `/services/${service.slug}`;
     const fallback = "บริการรับซื้อสินค้าไอที ประเมินไว นัดรับถึงที่ และจ่ายทันทีผ่าน LINE @webuy";
@@ -68,28 +101,14 @@ export default async function Page({ params }: { params: { slug: string } }) {
   const slug = String(params.slug || "").trim();
   if (!slug) notFound();
 
-  let service: any = null;
-  let index;
-
-  try {
-    const data = await getCachedServicesList();
-    service = (data?.services?.nodes ?? []).find((n: any) => isSiteMatch(n?.site) && String(n?.slug || "").toLowerCase() === String(slug).toLowerCase());
-    // ถ้าไม่อยู่ใน cache (เนื้อหาใหม่จาก WP) — ดึงจาก WP ตาม slug
-    if (!service) {
-      const bySlug = await fetchGql<{ services?: { nodes?: any[] } }>(Q_SERVICE_BY_SLUG, { slug }, { revalidate: 3600 });
-      const node = bySlug?.services?.nodes?.[0];
-      if (node && String(node?.status || "").toLowerCase() === "publish" && isSiteMatch(node?.site)) service = node;
-    }
-    if (!service || !isSiteMatch(service?.site)) notFound();
-  } catch (error) {
-    console.error("Error fetching service:", slug, error);
-    notFound();
-  }
+  const service = await getServiceOrNull(slug);
+  if (!service) notFound();
 
   const emptyIndex = { services: { nodes: [] as any[] }, locationpages: { nodes: [] as any[] }, pricemodels: { nodes: [] as any[] }, faqs: { nodes: [] as any[] } };
+  let index: any = emptyIndex;
   try {
-    const raw = await fetchGql<any>(Q_HUB_INDEX, undefined, { revalidate: 3600 });
-    const r = raw ?? emptyIndex;
+    const cached = await getCachedHubIndex();
+    const r = cached ?? emptyIndex;
     index = {
       services: { nodes: (r.services?.nodes ?? []).filter((n: any) => isSiteMatch(n?.site)) },
       locationpages: { nodes: (r.locationpages?.nodes ?? []).filter((n: any) => isSiteMatch(n?.site)) },
@@ -97,8 +116,7 @@ export default async function Page({ params }: { params: { slug: string } }) {
       faqs: r.faqs ? { nodes: (r.faqs?.nodes ?? []).filter((n: any) => isSiteMatch(n?.site)) } : undefined,
     };
   } catch (error) {
-    console.error('Error fetching hub index:', error);
-    index = emptyIndex;
+    console.error("Error fetching cached hub index:", error);
   }
 
   const relatedLocations = relatedByCategory(index?.locationpages?.nodes ?? [], service, 8);
