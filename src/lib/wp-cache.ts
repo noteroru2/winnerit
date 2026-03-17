@@ -13,6 +13,7 @@ import {
   Q_LOCATIONPAGES_LIST,
   Q_PRICEMODELS_LIST,
   Q_HUB_INDEX,
+  Q_SERVICE_RELATED_INDEX,
 } from "@/lib/queries";
 
 const CACHE_TAG = "wp-lists";
@@ -27,6 +28,15 @@ export async function getCachedHubIndex() {
   return unstable_cache(
     async () => fetchGql<any>(Q_HUB_INDEX, undefined, { revalidate: REVALIDATE }),
     cacheKey("hub-index"),
+    { revalidate: REVALIDATE, tags: [CACHE_TAG, "wp"] }
+  )();
+}
+
+/** Cache a smaller index for service detail related sections */
+export async function getCachedServiceRelatedIndex() {
+  return unstable_cache(
+    async () => fetchGql<any>(Q_SERVICE_RELATED_INDEX, undefined, { revalidate: REVALIDATE }),
+    cacheKey("service-related-index"),
     { revalidate: REVALIDATE, tags: [CACHE_TAG, "wp"] }
   )();
 }

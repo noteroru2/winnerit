@@ -230,6 +230,21 @@ export const Q_HUB_INDEX = /* GraphQL */ `
   }
 `;
 
+/**
+ * Lightweight index for service detail pages (related sections only).
+ * Avoids fetching services + devicecategories which aren't needed to compute related links.
+ */
+export const Q_SERVICE_RELATED_INDEX = /* GraphQL */ `
+  query ServiceRelatedIndex {
+    locationpages(first: 300) {
+      nodes { id title slug status province district site devicecategories { nodes { slug } } }
+    }
+    pricemodels(first: 300) {
+      nodes { id title slug status device price condition site devicecategories { nodes { slug } } }
+    }
+  }
+`;
+
 export const Q_DEVICECATEGORY_SLUGS = /* GraphQL */ `
   query DeviceCategorySlugs {
     devicecategories(first: 1000) {

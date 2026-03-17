@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { siteUrl, nodeCats } from "@/lib/wp";
-import { getCachedHubIndex, getCachedServiceBySlug, getCachedServiceSlugs } from "@/lib/wp-cache";
+import { getCachedServiceBySlug, getCachedServiceRelatedIndex, getCachedServiceSlugs } from "@/lib/wp-cache";
 import { relatedByCategory } from "@/lib/related";
 import { JsonLd } from "@/components/JsonLd";
 import { jsonLdFaqPage } from "@/lib/jsonld";
@@ -104,19 +104,17 @@ export default async function Page({ params }: { params: { slug: string } }) {
   const service = await getServiceOrNull(slug);
   if (!service) notFound();
 
-  const emptyIndex = { services: { nodes: [] as any[] }, locationpages: { nodes: [] as any[] }, pricemodels: { nodes: [] as any[] }, faqs: { nodes: [] as any[] } };
+  const emptyIndex = { locationpages: { nodes: [] as any[] }, pricemodels: { nodes: [] as any[] } };
   let index: any = emptyIndex;
   try {
-    const cached = await getCachedHubIndex();
+    const cached = await getCachedServiceRelatedIndex();
     const r = cached ?? emptyIndex;
     index = {
-      services: { nodes: (r.services?.nodes ?? []).filter((n: any) => isSiteMatch(n?.site)) },
       locationpages: { nodes: (r.locationpages?.nodes ?? []).filter((n: any) => isSiteMatch(n?.site)) },
       pricemodels: { nodes: (r.pricemodels?.nodes ?? []).filter((n: any) => isSiteMatch(n?.site)) },
-      faqs: r.faqs ? { nodes: (r.faqs?.nodes ?? []).filter((n: any) => isSiteMatch(n?.site)) } : undefined,
     };
   } catch (error) {
-    console.error("Error fetching cached hub index:", error);
+    console.error("Error fetching cached service related index:", error);
   }
 
   const relatedLocations = relatedByCategory(index?.locationpages?.nodes ?? [], service, 8);
