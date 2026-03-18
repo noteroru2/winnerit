@@ -1,6 +1,7 @@
 /**
- * Sitemap services (segmented) — /sitemap-services/{segment}.xml
- * Segment ละ URLS_PER_SEGMENT (default 400) เพื่อลด timeout และคุมขนาดไฟล์
+ * Sitemap services (segmented) — /sitemap-services/{segment}
+ * รูปแบบเดียวกับ webuy (ไม่มี .xml ใน path) เพื่อให้ GSC ดึงได้
+ * Segment ละ URLS_PER_SEGMENT (default 400)
  */
 import {
   getEmptyUrlsetXml,
@@ -17,9 +18,12 @@ const HEADERS = {
   "Cache-Control": "public, max-age=3600, s-maxage=3600",
 } as const;
 
-export async function GET(_: Request, ctx: { params: { segment: string } }) {
+type RouteContext = { params: Promise<{ segment: string }> | { segment: string } };
+
+export async function GET(_: Request, ctx: { params: RouteContext["params"] }) {
   try {
-    const seg = Number(ctx?.params?.segment);
+    const params = await Promise.resolve(ctx.params);
+    const seg = Number(params?.segment);
     const entries = await getServiceEntriesForSegment(seg);
     const xml = entries.length ? sitemapEntriesToXml(entries) : getEmptyUrlsetXml();
     return new Response(xml, { status: 200, headers: HEADERS });
@@ -28,4 +32,3 @@ export async function GET(_: Request, ctx: { params: { segment: string } }) {
     return new Response(xml, { status: 200, headers: HEADERS });
   }
 }
-

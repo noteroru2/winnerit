@@ -25,7 +25,7 @@ export async function GET() {
     ];
     // services แยกเป็น segment 1..N (อย่าลิสต์เกินจริง)
     for (let i = 1; i <= serviceSegments; i++) {
-      sitemaps.push({ loc: `${base}/sitemap-services/${i}.xml` });
+      sitemaps.push({ loc: `${base}/sitemap-services/${i}` });
     }
     const xml = buildSitemapIndexXml(sitemaps);
     return new Response(xml, { status: 200, headers: HEADERS });
