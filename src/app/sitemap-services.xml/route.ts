@@ -1,10 +1,10 @@
 /**
  * Sitemap services — /sitemap-services.xml
  */
-import { getServicesEntries, sitemapEntriesToXml, getMinimalSitemapXml } from "@/lib/sitemap-build";
+import { getServiceEntriesForSegment, sitemapEntriesToXml, getMinimalSitemapXml } from "@/lib/sitemap-build";
 
 export const revalidate = 86400;
-export const runtime = "edge";
+export const runtime = "nodejs";
 
 const HEADERS = {
   "Content-Type": "application/xml; charset=utf-8",
@@ -13,7 +13,8 @@ const HEADERS = {
 
 export async function GET() {
   try {
-    const entries = await getServicesEntries();
+    // Backward-compat: sitemap-services.xml ให้ชี้เทียบเท่า segment 1
+    const entries = await getServiceEntriesForSegment(1);
     const xml = entries.length ? sitemapEntriesToXml(entries) : getMinimalSitemapXml();
     return new Response(xml, { status: 200, headers: HEADERS });
   } catch {

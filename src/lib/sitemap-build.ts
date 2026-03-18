@@ -2,28 +2,31 @@
  * Logic สำหรับ build รายการ sitemap — ใช้ทั้ง metadata sitemap และ route ที่ส่ง XML พร้อม declaration
  * ใช้ getCached* จาก wp-cache เพื่อแชร์ cache กับหน้าอื่น (ลด query ซ้ำ)
  */
+import { unstable_cache } from "next/cache";
 import { fetchGql, siteUrl } from "@/lib/wp";
-import {
-  getCachedServiceSlugs,
-  getCachedLocationSlugs,
-  getCachedPriceSlugs,
-  getCachedCategorySlugs,
-} from "@/lib/wp-cache";
+import { getSiteKey, isSiteMatch } from "@/lib/site-key";
 import {
   Q_SERVICE_SLUGS_PAGINATED,
   Q_LOCATION_SLUGS_PAGINATED,
   Q_PRICE_SLUGS_PAGINATED,
   Q_DEVICECATEGORY_SLUGS_PAGINATED,
 } from "@/lib/queries";
-import { isSiteMatch } from "@/lib/site-key";
 
 export const SITEMAP_REVALIDATE = 86400;
-/** ต่อ 1 request — ให้ตอบภายใน ~3s เพื่อ Google ไม่ timeout */
-const SITEMAP_WP_TIMEOUT_MS = Number(process.env.SITEMAP_WP_TIMEOUT_MS) || 3000;
+/** จำกัด URL ต่อ 1 sitemap segment เพื่อลด timeout */
+export const URLS_PER_SEGMENT = Number(process.env.SITEMAP_URLS_PER_SEGMENT) || 400;
+/** กัน sitemap index โตเกิน + กัน loop ไม่จบ */
+export const SEGMENTS_MAX = Number(process.env.SITEMAP_SEGMENTS_MAX) || 50;
+/** ต่อ 1 request ไป WP (ms) — บน VPS แนะนำ 8000–15000 */
+const SITEMAP_WP_TIMEOUT_MS = Number(process.env.SITEMAP_WP_TIMEOUT_MS) || 12000;
+/** Timeout ทั้ง route (ms) — กัน request ค้าง */
+const SITEMAP_REQUEST_TIMEOUT_MS = Number(process.env.SITEMAP_REQUEST_TIMEOUT_MS) || 15000;
 /** ดึงครั้งละเท่านี้ (WP มักจำกัด first ที่ 100) */
 const SITEMAP_PAGE_SIZE = 100;
 /** สูงสุดกี่รอบ (กัน loop ไม่จบ) */
 const SITEMAP_MAX_PAGES = 20;
+/** content ที่เยอะ: services (default สูงกว่า) */
+const SITEMAP_SERVICE_MAX_PAGES = Number(process.env.SITEMAP_SERVICE_MAX_PAGES) || 50;
 
 function isPublish(status: any) {
   return String(status || "").toLowerCase() === "publish";
@@ -59,43 +62,25 @@ export async function getSitemapEntries(): Promise<SitemapEntry[]> {
   push(`${base}/privacy-policy`, "monthly", 0.3);
   push(`${base}/terms`, "monthly", 0.3);
 
-  let svc: any = null;
-  let loc: any = null;
-  let pri: any = null;
-  let cat: any = null;
+  // NOTE: Blueprint ใหม่ให้แยก services เป็น segmented sitemap; ฟังก์ชันนี้คงไว้เพื่อใช้งานอื่น
+  // และใช้ข้อมูลแบบ cache ระดับดิบ (ดึงทั้งหมด 1 ครั้ง แล้ว slice เมื่อจำเป็น)
   try {
-    const wpPromise = Promise.all([
-      getCachedServiceSlugs(),
-      getCachedLocationSlugs(),
-      getCachedPriceSlugs(),
-      getCachedCategorySlugs(),
-    ]);
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("sitemap WP timeout")), SITEMAP_WP_TIMEOUT_MS)
+    const [svcNodes, locNodes, priNodes, catNodes] = await withRouteTimeout(
+      Promise.all([
+        getAllServiceSlugNodes(),
+        getAllLocationSlugNodes(),
+        getAllPriceSlugNodes(),
+        getAllCategorySlugNodes(),
+      ])
     );
-    const result = await Promise.race([wpPromise, timeoutPromise]);
-    [svc, loc, pri, cat] = result;
+    for (const n of svcNodes) push(`${base}/services/${n.slug}`, "weekly", 0.9);
+    for (const n of locNodes) push(`${base}/locations/${n.slug}`, "weekly", 0.8);
+    for (const n of priNodes) push(`${base}/prices/${n.slug}`, "weekly", 0.7);
+    for (const n of catNodes) push(`${base}/categories/${n.slug}`, "weekly", 0.6);
   } catch (err) {
     if (process.env.NODE_ENV !== "production") {
       console.warn("[sitemap] WP fetch failed, using static pages only:", (err as Error)?.message ?? err);
     }
-  }
-
-  for (const n of svc?.services?.nodes ?? []) {
-    if (!n?.slug || !isPublish(n?.status) || !isSiteMatch(n?.site)) continue;
-    push(`${base}/services/${n.slug}`, "weekly", 0.9);
-  }
-  for (const n of loc?.locationpages?.nodes ?? []) {
-    if (!n?.slug || !isPublish(n?.status) || !isSiteMatch(n?.site)) continue;
-    push(`${base}/locations/${n.slug}`, "weekly", 0.8);
-  }
-  for (const n of pri?.pricemodels?.nodes ?? []) {
-    if (!n?.slug || !isPublish(n?.status) || !isSiteMatch(n?.site)) continue;
-    push(`${base}/prices/${n.slug}`, "weekly", 0.7);
-  }
-  for (const n of cat?.devicecategories?.nodes ?? []) {
-    if (!n?.slug || !isSiteMatch(n?.site)) continue;
-    push(`${base}/categories/${n.slug}`, "weekly", 0.6);
   }
 
   return items;
@@ -110,6 +95,11 @@ export function sitemapEntriesToXml(entries: SitemapEntry[]): string {
     )
     .join("\n");
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urlset}\n</urlset>`;
+}
+
+/** Sitemap urlset ว่าง (สถานะ 200) — ใช้เมื่อ segment ไม่อยู่ใน range */
+export function getEmptyUrlsetXml(): string {
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n</urlset>`;
 }
 
 /** Sitemap Index (รวมลิงก์ไปยัง sitemap ย่อย) — รูปแบบ sitemaps.org */
@@ -144,19 +134,30 @@ export function getPagesEntries(): SitemapEntry[] {
   ];
 }
 
+function cacheKey(...parts: string[]) {
+  return ["sitemap", getSiteKey(), ...parts];
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label = "timeout"): Promise<T> {
+  const t = new Promise<never>((_, reject) => setTimeout(() => reject(new Error(label)), ms));
+  return Promise.race([promise, t]);
+}
+
+function withRouteTimeout<T>(promise: Promise<T>): Promise<T> {
+  return withTimeout(promise, SITEMAP_REQUEST_TIMEOUT_MS, "sitemap route timeout");
+}
+
 async function fetchOne<T>(
   query: string,
   revalidate = SITEMAP_REVALIDATE,
   variables?: Record<string, unknown>
 ): Promise<T | null> {
   try {
-    const timeout = new Promise<never>((_, rej) =>
-      setTimeout(() => rej(new Error("timeout")), SITEMAP_WP_TIMEOUT_MS)
-    );
-    return await Promise.race([
+    return await withTimeout(
       fetchGql<T>(query, variables, { revalidate }),
-      timeout,
-    ]);
+      SITEMAP_WP_TIMEOUT_MS,
+      "sitemap WP timeout"
+    );
   } catch {
     return null;
   }
@@ -171,10 +172,11 @@ type PaginatedConnection<T> = {
 async function fetchAllPaginated<TNode>(
   query: string,
   getConnection: (data: Record<string, unknown>) => unknown
+  , maxPages = SITEMAP_MAX_PAGES
 ): Promise<TNode[]> {
   const all: TNode[] = [];
   let after: string | null = null;
-  for (let p = 0; p < SITEMAP_MAX_PAGES; p++) {
+  for (let p = 0; p < maxPages; p++) {
     const data: Record<string, unknown> | null = await fetchOne<Record<string, unknown>>(
       query,
       SITEMAP_REVALIDATE,
@@ -187,6 +189,130 @@ async function fetchAllPaginated<TNode>(
     after = conn.pageInfo.endCursor;
   }
   return all;
+}
+
+type SlugNode = { slug: string };
+type ServiceSlugNode = { slug?: string; status?: string; site?: string };
+type PublishSlugNode = { slug?: string; status?: string; site?: string };
+type CategorySlugNode = { slug?: string; site?: string };
+
+function toSlugNodes<T extends { slug?: string }>(nodes: T[], pick: (n: T) => boolean): SlugNode[] {
+  const out: SlugNode[] = [];
+  const seen = new Set<string>();
+  for (const n of nodes) {
+    const slug = String(n?.slug ?? "").trim().toLowerCase();
+    if (!slug || seen.has(slug)) continue;
+    if (!pick(n)) continue;
+    seen.add(slug);
+    out.push({ slug });
+  }
+  return out;
+}
+
+let inFlightServices: Promise<SlugNode[]> | null = null;
+let inFlightLocations: Promise<SlugNode[]> | null = null;
+let inFlightPrices: Promise<SlugNode[]> | null = null;
+let inFlightCategories: Promise<SlugNode[]> | null = null;
+
+/** ดึง slug nodes ทั้งหมด 1 ครั้ง (paginate) แล้ว cache 24 ชม. — services เยอะ ใช้เพดาน paginate สูงกว่า */
+export async function getAllServiceSlugNodes(): Promise<SlugNode[]> {
+  const cached = unstable_cache(
+    async () => {
+      const nodes = await fetchAllPaginated<ServiceSlugNode>(
+        Q_SERVICE_SLUGS_PAGINATED,
+        (d) => d?.services,
+        SITEMAP_SERVICE_MAX_PAGES
+      );
+      return toSlugNodes(nodes, (n) => isPublish(n?.status) && isSiteMatch(n?.site));
+    },
+    cacheKey("services-all-slugs"),
+    { revalidate: SITEMAP_REVALIDATE, tags: ["sitemap", "wp"] }
+  );
+  if (!inFlightServices) inFlightServices = cached().finally(() => (inFlightServices = null));
+  return inFlightServices;
+}
+
+export async function getAllLocationSlugNodes(): Promise<SlugNode[]> {
+  const cached = unstable_cache(
+    async () => {
+      const nodes = await fetchAllPaginated<PublishSlugNode>(
+        Q_LOCATION_SLUGS_PAGINATED,
+        (d) => d?.locationpages,
+        SITEMAP_MAX_PAGES
+      );
+      return toSlugNodes(nodes, (n) => isPublish(n?.status) && isSiteMatch(n?.site));
+    },
+    cacheKey("locations-all-slugs"),
+    { revalidate: SITEMAP_REVALIDATE, tags: ["sitemap", "wp"] }
+  );
+  if (!inFlightLocations) inFlightLocations = cached().finally(() => (inFlightLocations = null));
+  return inFlightLocations;
+}
+
+export async function getAllPriceSlugNodes(): Promise<SlugNode[]> {
+  const cached = unstable_cache(
+    async () => {
+      const nodes = await fetchAllPaginated<PublishSlugNode>(
+        Q_PRICE_SLUGS_PAGINATED,
+        (d) => d?.pricemodels,
+        SITEMAP_MAX_PAGES
+      );
+      return toSlugNodes(nodes, (n) => isPublish(n?.status) && isSiteMatch(n?.site));
+    },
+    cacheKey("prices-all-slugs"),
+    { revalidate: SITEMAP_REVALIDATE, tags: ["sitemap", "wp"] }
+  );
+  if (!inFlightPrices) inFlightPrices = cached().finally(() => (inFlightPrices = null));
+  return inFlightPrices;
+}
+
+export async function getAllCategorySlugNodes(): Promise<SlugNode[]> {
+  const cached = unstable_cache(
+    async () => {
+      const nodes = await fetchAllPaginated<CategorySlugNode>(
+        Q_DEVICECATEGORY_SLUGS_PAGINATED,
+        (d) => d?.devicecategories,
+        SITEMAP_MAX_PAGES
+      );
+      return toSlugNodes(nodes, (n) => isSiteMatch(n?.site));
+    },
+    cacheKey("categories-all-slugs"),
+    { revalidate: SITEMAP_REVALIDATE, tags: ["sitemap", "wp"] }
+  );
+  if (!inFlightCategories) inFlightCategories = cached().finally(() => (inFlightCategories = null));
+  return inFlightCategories;
+}
+
+/** จำนวน segment สำหรับ services (ceil(total/400)) + cap ด้วย SEGMENTS_MAX */
+export async function getServiceSegmentsCount(): Promise<number> {
+  const cached = unstable_cache(
+    async () => {
+      const total = (await getAllServiceSlugNodes()).length;
+      const count = Math.max(1, Math.ceil(total / URLS_PER_SEGMENT));
+      return Math.min(count, SEGMENTS_MAX);
+    },
+    cacheKey("services-segments-count"),
+    { revalidate: SITEMAP_REVALIDATE, tags: ["sitemap", "wp"] }
+  );
+  return cached();
+}
+
+export async function getServiceEntriesForSegment(segmentNum: number): Promise<SitemapEntry[]> {
+  const base = siteUrl().replace(/\/$/, "");
+  const now = new Date();
+  const i = Number(segmentNum);
+  if (!Number.isFinite(i) || i < 1) return [];
+  const nodes = await getAllServiceSlugNodes();
+  const totalSegments = await getServiceSegmentsCount();
+  if (i > totalSegments) return [];
+  const start = (i - 1) * URLS_PER_SEGMENT;
+  const slice = nodes.slice(start, start + URLS_PER_SEGMENT);
+  return slice.map((n) => ({
+    url: `${base}/services/${n.slug}`,
+    lastModified: now,
+    changeFrequency: "weekly",
+    priority: 0.9,
+  }));
 }
 
 /** Locations จาก WP — แบ่งหน้าดึงเกิน 100 ได้ */
@@ -209,16 +335,13 @@ export async function getLocationsEntries(): Promise<SitemapEntry[]> {
 export async function getServicesEntries(): Promise<SitemapEntry[]> {
   const base = siteUrl().replace(/\/$/, "");
   const now = new Date();
-  const nodes = await fetchAllPaginated<{ slug?: string; status?: string; site?: string }>(
-    Q_SERVICE_SLUGS_PAGINATED,
-    (d) => d?.services
-  );
-  const items: SitemapEntry[] = [];
-  for (const n of nodes) {
-    if (!n?.slug || !isPublish(n?.status) || !isSiteMatch(n?.site)) continue;
-    items.push({ url: `${base}/services/${n.slug}`, lastModified: now, changeFrequency: "weekly", priority: 0.9 });
-  }
-  return items;
+  const nodes = await getAllServiceSlugNodes();
+  return nodes.map((n) => ({
+    url: `${base}/services/${n.slug}`,
+    lastModified: now,
+    changeFrequency: "weekly",
+    priority: 0.9,
+  }));
 }
 
 /** Categories (devicecategories) จาก WP — แบ่งหน้าดึงเกิน 100 ได้ */
