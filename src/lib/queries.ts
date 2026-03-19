@@ -113,6 +113,7 @@ export const Q_SERVICES_LIST = /* GraphQL */ `
         site
         icon
         content
+        devicecategories { nodes { slug name } }
       }
     }
   }
@@ -187,6 +188,7 @@ export const Q_PRICEMODELS_LIST = /* GraphQL */ `
         condition
         site
         content
+        devicecategories { nodes { slug name } }
       }
     }
   }

@@ -1,5 +1,6 @@
 import { intersectSlugs, uniqBy } from "@/lib/shared";
 import { nodeCats } from "@/lib/wp";
+import { isPublicListableStatus } from "@/lib/content-filters";
 
 export function deriveCategoriesFromItems(items: any[]) {
   const cats: { slug: string; name?: string }[] = [];
@@ -17,14 +18,14 @@ export function deriveCategoriesFromItems(items: any[]) {
 export function filterByCategory(items: any[], catSlug: string) {
   const slugLower = String(catSlug || "").toLowerCase();
   return items
-    .filter((x) => String(x?.status || "").toLowerCase() === "publish")
+    .filter((x) => isPublicListableStatus(x?.status))
     .filter((x) => nodeCats(x).some((s: string) => String(s).toLowerCase() === slugLower));
 }
 
 export function relatedByCategory(items: any[], base: any, limit = 12) {
   const baseCats = nodeCats(base);
   const filtered = items
-    .filter((x) => String(x?.status || "").toLowerCase() === "publish")
+    .filter((x) => isPublicListableStatus(x?.status))
     .filter((x) => x?.slug && x.slug !== base?.slug)
     .filter((x) => intersectSlugs(nodeCats(x), baseCats));
   return filtered.slice(0, limit);

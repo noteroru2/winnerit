@@ -3,7 +3,13 @@ import Link from "next/link";
 import { cache } from "react";
 import { notFound } from "next/navigation";
 import { siteUrl } from "@/lib/wp";
-import { getCachedHubIndex, getCachedCategoryBySlug } from "@/lib/wp-cache";
+import {
+  getCachedHubIndex,
+  getCachedCategoryBySlug,
+  getCachedServicesList,
+  getCachedLocationpagesList,
+  getCachedPricemodelsList,
+} from "@/lib/wp-cache";
 import { filterByCategory } from "@/lib/related";
 import { stripHtml } from "@/lib/shared";
 import { pageMetadata, inferDescriptionFromHtml } from "@/lib/seo";
@@ -13,10 +19,12 @@ import { categoryFaqSeed } from "@/lib/seoCategory";
 import { BackToTop } from "@/components/BackToTop";
 import { EmptyState } from "@/components/EmptyState";
 import { BUSINESS_INFO } from "@/lib/constants";
-import { isSiteMatch } from "@/lib/site-key";
+import { includeHubNodeForSite } from "@/lib/site-key";
 
 export const revalidate = 86400; // 24 ชม. — กัน WP ล่มตอน ISR
 export const dynamicParams = true;
+/** ดึง hub ตอน request — สอดคล้องหน้าแรก + กัน HTML ว่างจาก build */
+export const dynamic = "force-dynamic";
 
 /** ไม่ SSG ตอน build — ทุก category เป็น ISR (build เร็ว) */
 export async function generateStaticParams() {
@@ -33,12 +41,13 @@ async function getCategoryPageData(slugParam: string) {
   const slug = String(slugParam || "").trim().toLowerCase();
   if (!slug) return { data: null, term: null };
   const raw = (await getCachedHubIndex()) ?? {};
+  // แบบ webuy-hub-v2: ไม่กรอง site บน hub โดยค่าเริ่มต้น — ใช้ includeHubNodeForSite (เดียวกับหน้าแรก)
   const data = {
     ...raw,
-    services: { nodes: (raw.services?.nodes ?? []).filter((n: any) => isSiteMatch(n?.site)) },
-    locationpages: { nodes: (raw.locationpages?.nodes ?? []).filter((n: any) => isSiteMatch(n?.site)) },
-    pricemodels: { nodes: (raw.pricemodels?.nodes ?? []).filter((n: any) => isSiteMatch(n?.site)) },
-    devicecategories: { nodes: (raw.devicecategories?.nodes ?? []).filter((n: any) => isSiteMatch(n?.site)) },
+    services: { nodes: (raw.services?.nodes ?? []).filter((n: any) => includeHubNodeForSite(n?.site)) },
+    locationpages: { nodes: (raw.locationpages?.nodes ?? []).filter((n: any) => includeHubNodeForSite(n?.site)) },
+    pricemodels: { nodes: (raw.pricemodels?.nodes ?? []).filter((n: any) => includeHubNodeForSite(n?.site)) },
+    devicecategories: { nodes: (raw.devicecategories?.nodes ?? []).filter((n: any) => includeHubNodeForSite(n?.site)) },
   };
   let term: any = (data.devicecategories?.nodes ?? []).find(
     (n: any) => String(n?.slug || "").toLowerCase() === slug
@@ -77,9 +86,24 @@ export default async function Page({ params }: { params: { slug: string } }) {
   const catSlug = String(term.slug).trim();
   const termName = String(term.name || catSlug).trim();
 
-  const services = filterByCategory(data.services?.nodes ?? [], catSlug);
-  const locations = filterByCategory(data.locationpages?.nodes ?? [], catSlug);
-  const prices = filterByCategory(data.pricemodels?.nodes ?? [], catSlug);
+  let services = filterByCategory(data.services?.nodes ?? [], catSlug);
+  let locations = filterByCategory(data.locationpages?.nodes ?? [], catSlug);
+  let prices = filterByCategory(data.pricemodels?.nodes ?? [], catSlug);
+
+  // Hub จำกัด 300/ชนิด — ถ้าหมวดนี้ไม่มีรายการเลย ลอง list เต็มจาก WP (แบบขยายขอบเขต)
+  if (services.length === 0 && locations.length === 0 && prices.length === 0) {
+    const [svcList, locList, priList] = await Promise.all([
+      getCachedServicesList(),
+      getCachedLocationpagesList(),
+      getCachedPricemodelsList(),
+    ]);
+    const svcNodes = (svcList?.services?.nodes ?? []).filter((n: any) => includeHubNodeForSite(n?.site));
+    const locNodes = (locList?.locationpages?.nodes ?? []).filter((n: any) => includeHubNodeForSite(n?.site));
+    const priNodes = (priList?.pricemodels?.nodes ?? []).filter((n: any) => includeHubNodeForSite(n?.site));
+    services = filterByCategory(svcNodes, catSlug);
+    locations = filterByCategory(locNodes, catSlug);
+    prices = filterByCategory(priNodes, catSlug);
+  }
 
   const seedFaqs = categoryFaqSeed(catSlug, termName);
   const faqs = seedFaqs
@@ -243,7 +267,7 @@ export default async function Page({ params }: { params: { slug: string } }) {
               description="ติดต่อทาง LINE เพื่อสอบถามบริการ"
               icon="🔧"
               actionLabel="แชท LINE"
-              actionHref="https://line.me/R/ti/p/@webuy"
+              actionHref={BUSINESS_INFO.lineUrl}
               actionExternal
             />
           )}
@@ -278,7 +302,7 @@ export default async function Page({ params }: { params: { slug: string } }) {
               description="สอบถามพื้นที่ของคุณทาง LINE"
               icon="📍"
               actionLabel="สอบถามพื้นที่"
-              actionHref="https://line.me/R/ti/p/@webuy"
+              actionHref={BUSINESS_INFO.lineUrl}
               actionExternal
             />
           )}
@@ -303,9 +327,13 @@ export default async function Page({ params }: { params: { slug: string } }) {
               <div className="muted mt-1 text-sm">
                 ช่วงราคารับซื้อ:{" "}
                 <span className="font-semibold text-slate-900">
-                  {p.buyPriceMin}-{p.buyPriceMax}
-                </span>{" "}
-                บาท
+                  {p.buyPriceMin != null && p.buyPriceMax != null
+                    ? `${p.buyPriceMin}-${p.buyPriceMax}`
+                    : p.price != null
+                      ? `${Number(p.price).toLocaleString()}฿ (อ้างอิง)`
+                      : "สอบถามราคา"}
+                </span>
+                {p.buyPriceMin != null && p.buyPriceMax != null ? " บาท" : ""}
               </div>
               <div className="mt-4 text-sm font-semibold text-brand-700">
                 เปิดหน้า Price <span className="inline-block transition group-hover:translate-x-0.5">→</span>
@@ -319,7 +347,7 @@ export default async function Page({ params }: { params: { slug: string } }) {
               description="ส่งรูป + สเปคทาง LINE เพื่อประเมินราคา"
               icon="💰"
               actionLabel="ประเมินราคา"
-              actionHref="https://line.me/R/ti/p/@webuy"
+              actionHref={BUSINESS_INFO.lineUrl}
               actionExternal
             />
           )}
@@ -347,7 +375,7 @@ export default async function Page({ params }: { params: { slug: string } }) {
               description="หากมีคำถาม สอบถามได้ทาง LINE"
               icon="❓"
               actionLabel="ถามคำถาม"
-              actionHref="https://line.me/R/ti/p/@webuy"
+              actionHref={BUSINESS_INFO.lineUrl}
               actionExternal
             />
           )}
