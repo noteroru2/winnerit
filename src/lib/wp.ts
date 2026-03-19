@@ -102,13 +102,24 @@ async function doFetch(body: any) {
   }
 }
 
-/** When true, return {} instead of throwing on fetch failure. บน Vercel เปิดไว้เพื่อให้ build ผ่านเมื่อ WP ช้า/ล่ม */
+/**
+ * ระหว่าง `next build` (Docker/Coolify/CI) ไม่มี VERCEL=1 แต่ NODE_ENV=production
+ * → ถ้าไม่เปิด fallback การยิง WP ที่ได้ 403/timeout จะ throw แล้ว build ล้มที่ "Generating static pages"
+ */
+const isNextProductionBuild =
+  process.env.NEXT_PHASE === "phase-production-build" ||
+  process.env.npm_lifecycle_event === "build" ||
+  process.env.CI === "true";
+
+/** When true, return {} instead of throwing on fetch failure. */
 const FALLBACK_ON_ERROR = (() => {
   const explicit = process.env.WP_FALLBACK_ON_ERROR;
   if (explicit === "0" || explicit === "false") return false;
   if (explicit === "1" || explicit === "true") return true;
-  if (isVercelProduction) return true; // build + runtime on Vercel: ไม่ throw เพื่อ build ผ่าน
-  return process.env.NODE_ENV === "development";
+  if (isVercelProduction) return true; // build + runtime on Vercel
+  if (process.env.NODE_ENV === "development") return true;
+  if (isNextProductionBuild) return true; // Coolify / Nixpacks / `npm run build`
+  return false;
 })();
 
 /** โหลดข้อมูลจริง (ไม่ผ่าน cache) — ใช้ภายใน fetchGql ที่ wrap ด้วย unstable_cache */
