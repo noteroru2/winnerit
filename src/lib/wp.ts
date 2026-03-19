@@ -14,8 +14,8 @@ const RETRY = Number(
 );
 
 const REQUEST_DELAY_MS = Number(
-  process.env.WP_REQUEST_DELAY_MS ?? (isVercel ? 400 : 2000)
-);
+  process.env.WP_REQUEST_DELAY_MS ?? (isVercel ? 200 : 2000)
+); // แบบ webuy-hub-v2: Vercel 200ms
 let lastRequestTime = 0;
 let requestCount = 0;
 

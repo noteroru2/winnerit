@@ -3,7 +3,7 @@ import Link from "next/link";
 import { pageMetadata } from "@/lib/seo";
 import { getCachedLocationSlugs } from "@/lib/wp-cache";
 import { BUSINESS_INFO } from "@/lib/constants";
-import { isSiteMatch } from "@/lib/site-key";
+import { includeHubNodeForSite } from "@/lib/site-key";
 
 /** ดึงรายการพื้นที่ตอน request — เหตุผลเดียวกับหน้าแรก */
 export const dynamic = "force-dynamic";
@@ -29,7 +29,7 @@ export default async function Page() {
     const nodes = (data?.locationpages?.nodes ?? [])
       .filter((n: any) => {
         if (!n?.slug || !isPublish(n?.status)) return false;
-        return isSiteMatch(n?.site);
+        return includeHubNodeForSite(n?.site);
       })
       .sort((a: any, b: any) => String(a.title || "").localeCompare(String(b.title || ""), "th"));
     if (nodes.length > 0) locations = nodes;

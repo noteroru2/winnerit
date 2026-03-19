@@ -4,7 +4,7 @@ import { getCategoriesFromHub } from "@/lib/categories";
 import type { Metadata } from "next";
 import { pageMetadata } from "@/lib/seo";
 import { BUSINESS_INFO } from "@/lib/constants";
-import { isSiteMatch } from "@/lib/site-key";
+import { includeHubNodeForSite } from "@/lib/site-key";
 
 /** ดึงหมวดตอน request — กันหน้า freeze จาก build ที่ WP ไม่ตอบ */
 export const dynamic = "force-dynamic";
@@ -33,7 +33,7 @@ export default async function Page() {
   const catRaw = await getCachedCategorySlugs();
   const categories = getCategoriesFromHub({
     devicecategories: {
-      nodes: (catRaw?.devicecategories?.nodes ?? []).filter((n: any) => isSiteMatch(n?.site)),
+      nodes: (catRaw?.devicecategories?.nodes ?? []).filter((n: any) => includeHubNodeForSite(n?.site)),
     },
   });
 

@@ -16,3 +16,20 @@ export function isSiteMatch(siteValue: unknown): boolean {
   const key = getSiteKey();
   return !s || s === key;
 }
+
+/**
+ * รายการบนหน้าแรก / รายการหมวด (แบบ webuy-hub-v2): ค่าเริ่มต้น **ไม่** กรอง `site`
+ * เพราะหลายหมวดใน WP ตั้ง site=webuy ขณะที่ deploy winnerit → รายการว่างทั้งบล็อก
+ *
+ * ต้องการกรองเหมือนเดิม: ตั้ง `SITE_STRICT_HUB_LISTINGS=1` ใน env
+ */
+export function strictHubListingsBySite(): boolean {
+  const v = process.env.SITE_STRICT_HUB_LISTINGS;
+  return v === "1" || String(v).toLowerCase() === "true";
+}
+
+/** ใช้กับ nodes ใน hub / รายการหมวดบนหน้าแรก */
+export function includeHubNodeForSite(siteValue: unknown): boolean {
+  if (!strictHubListingsBySite()) return true;
+  return isSiteMatch(siteValue);
+}

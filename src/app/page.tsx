@@ -3,7 +3,7 @@ import Image from "next/image";
 import { siteUrl } from "@/lib/wp";
 import { getCachedHubIndex, getCachedCategorySlugs } from "@/lib/wp-cache";
 import { getCategoriesFromHub } from "@/lib/categories";
-import { isSiteMatch } from "@/lib/site-key";
+import { includeHubNodeForSite } from "@/lib/site-key";
 import type { Metadata } from "next";
 import { pageMetadata } from "@/lib/seo";
 import JsonLd from "@/components/JsonLd";
@@ -37,13 +37,13 @@ export default async function Page() {
   const [raw, catRaw] = await Promise.all([getCachedHubIndex(), getCachedCategorySlugs()]);
   const data = raw ?? {};
 
-  const servicesAll = (data.services?.nodes ?? []).filter((n: any) => isSiteMatch(n?.site));
-  const locationsAll = (data.locationpages?.nodes ?? []).filter((n: any) => isSiteMatch(n?.site));
-  const pricesAll = (data.pricemodels?.nodes ?? []).filter((n: any) => isSiteMatch(n?.site));
-  // หมวด: ใช้ query แยก (first: 1000) ไม่ใช้ Hub index ที่จำกัด 300 — กันหมวดขึ้นไม่ครบ
+  // แบบ webuy-hub-v2: ค่าเริ่มต้นไม่กรอง site บนรายการ hub — กรองเมื่อ SITE_STRICT_HUB_LISTINGS=1
+  const servicesAll = (data.services?.nodes ?? []).filter((n: any) => includeHubNodeForSite(n?.site));
+  const locationsAll = (data.locationpages?.nodes ?? []).filter((n: any) => includeHubNodeForSite(n?.site));
+  const pricesAll = (data.pricemodels?.nodes ?? []).filter((n: any) => includeHubNodeForSite(n?.site));
   const categories = getCategoriesFromHub({
     devicecategories: {
-      nodes: (catRaw?.devicecategories?.nodes ?? []).filter((n: any) => isSiteMatch(n?.site)),
+      nodes: (catRaw?.devicecategories?.nodes ?? []).filter((n: any) => includeHubNodeForSite(n?.site)),
     },
   });
 
