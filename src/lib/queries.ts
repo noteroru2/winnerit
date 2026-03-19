@@ -23,7 +23,7 @@ export const Q_SITE_SETTINGS = /* GraphQL */ `
 export const Q_SERVICE_SLUGS = /* GraphQL */ `
   query ServiceSlugs {
     services(first: 1000) {
-      nodes { slug status site }
+      nodes { slug status site title }
     }
   }
 `;
@@ -66,7 +66,7 @@ export const Q_LOCATION_SLUGS_PAGINATED = /* GraphQL */ `
 export const Q_PRICE_SLUGS = /* GraphQL */ `
   query PriceSlugs {
     pricemodels(first: 1000) {
-      nodes { slug status site }
+      nodes { slug status site title }
     }
   }
 `;

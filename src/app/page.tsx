@@ -1,7 +1,13 @@
 import Link from "next/link";
 import Image from "next/image";
 import { siteUrl } from "@/lib/wp";
-import { getCachedHubIndex, getCachedCategorySlugs } from "@/lib/wp-cache";
+import {
+  getCachedHubIndex,
+  getCachedCategorySlugs,
+  getCachedServiceSlugs,
+  getCachedLocationSlugs,
+  getCachedPriceSlugs,
+} from "@/lib/wp-cache";
 import { getCategoriesFromHub } from "@/lib/categories";
 import { includeHubNodeForSite } from "@/lib/site-key";
 import type { Metadata } from "next";
@@ -12,6 +18,7 @@ import { jsonLdOrganization, jsonLdWebSite } from "@/lib/jsonld-org";
 import { BackToTop } from "@/components/BackToTop";
 import { EmptyState } from "@/components/EmptyState";
 import { BUSINESS_INFO } from "@/lib/constants";
+import { isPublicListableStatus } from "@/lib/content-filters";
 
 export const metadata: Metadata = pageMetadata({
   title: "รับซื้อโน๊ตบุ๊ค MacBook PC อุปกรณ์ไอที | ราคาสูง นัดรับถึงบ้าน",
@@ -25,12 +32,11 @@ export const dynamic = "force-dynamic";
 
 export const revalidate = 86400;
 
-function isPublish(status: any) {
-  return String(status || "").toLowerCase() === "publish";
-}
-
 function takePublished(nodes: any[], limit = 8) {
-  return (nodes ?? []).filter((x: any) => x?.slug && isPublish(x?.status)).slice(0, limit);
+  return (nodes ?? [])
+    .filter((x: any) => String(x?.slug ?? "").trim())
+    .filter((x: any) => isPublicListableStatus(x?.status))
+    .slice(0, limit);
 }
 
 export default async function Page() {
@@ -47,9 +53,36 @@ export default async function Page() {
     },
   });
 
-  const topServices = takePublished(servicesAll, 8);
-  const topLocations = takePublished(locationsAll, 8);
-  const topPrices = takePublished(pricesAll, 8);
+  let topServices = takePublished(servicesAll, 8);
+  let topLocations = takePublished(locationsAll, 8);
+  let topPrices = takePublished(pricesAll, 8);
+
+  // Hub บางครั้งว่าง (cache/field) แต่ slug query ยังมี — โชว์รายการสำรวจต่อให้ได้
+  if (topServices.length === 0 || topLocations.length === 0 || topPrices.length === 0) {
+    const [svcData, locData, priData] = await Promise.all([
+      topServices.length ? Promise.resolve(null) : getCachedServiceSlugs(),
+      topLocations.length ? Promise.resolve(null) : getCachedLocationSlugs(),
+      topPrices.length ? Promise.resolve(null) : getCachedPriceSlugs(),
+    ]);
+    if (topServices.length === 0 && svcData?.services?.nodes?.length) {
+      topServices = takePublished(
+        (svcData.services.nodes as any[]).filter((n: any) => includeHubNodeForSite(n?.site)),
+        8
+      );
+    }
+    if (topLocations.length === 0 && locData?.locationpages?.nodes?.length) {
+      topLocations = takePublished(
+        (locData.locationpages.nodes as any[]).filter((n: any) => includeHubNodeForSite(n?.site)),
+        8
+      );
+    }
+    if (topPrices.length === 0 && priData?.pricemodels?.nodes?.length) {
+      topPrices = takePublished(
+        (priData.pricemodels.nodes as any[]).filter((n: any) => includeHubNodeForSite(n?.site)),
+        8
+      );
+    }
+  }
 
   const pageUrl = siteUrl() + "/";
   const howToJson = jsonLdHowTo(pageUrl);
@@ -166,13 +199,15 @@ export default async function Page() {
                 <ul className="space-y-2">
                   {topServices.slice(0, 5).map((s: any) => (
                     <li key={s.slug}>
-                      <Link href={`/services/${s.slug}`} className="text-sm text-slate-500 hover:text-brand-600 transition-colors">{s.title}</Link>
+                      <Link href={`/services/${s.slug}`} className="text-sm text-slate-500 hover:text-brand-600 transition-colors">
+                        {String(s.title || s.slug || "").trim() || s.slug}
+                      </Link>
                     </li>
                   ))}
-                  <li className="pt-1"><Link href="/categories" className="text-sm font-semibold text-brand-600 hover:text-brand-700">ดูทั้งหมด &rarr;</Link></li>
+                  <li className="pt-1"><Link href="/categories" className="text-sm font-semibold text-brand-600 hover:text-brand-700">ดูหมวดสินค้า &rarr;</Link></li>
                 </ul>
               ) : (
-                <p className="text-sm text-slate-400">กำลังเพิ่มบริการ</p>
+                <p className="text-sm text-slate-400">กำลังโหลดบริการ…</p>
               )}
             </div>
 
@@ -188,13 +223,15 @@ export default async function Page() {
                 <ul className="space-y-2">
                   {topLocations.slice(0, 5).map((l: any) => (
                     <li key={l.slug}>
-                      <Link href={`/locations/${l.slug}`} className="text-sm text-slate-500 hover:text-brand-600 transition-colors">{l.title}</Link>
+                      <Link href={`/locations/${l.slug}`} className="text-sm text-slate-500 hover:text-brand-600 transition-colors">
+                        {String(l.title || l.slug || "").trim() || l.slug}
+                      </Link>
                     </li>
                   ))}
                   <li className="pt-1"><Link href="/locations" className="text-sm font-semibold text-brand-600 hover:text-brand-700">ดูทั้งหมด &rarr;</Link></li>
                 </ul>
               ) : (
-                <p className="text-sm text-slate-400">กำลังขยายพื้นที่</p>
+                <p className="text-sm text-slate-400">กำลังโหลดพื้นที่…</p>
               )}
             </div>
 
@@ -211,15 +248,15 @@ export default async function Page() {
                   {topPrices.slice(0, 5).map((p: any) => (
                     <li key={p.slug}>
                       <Link href={`/prices/${p.slug}`} className="text-sm text-slate-500 hover:text-brand-600 transition-colors">
-                        {p.title}
+                        {String(p.title || p.slug || "").trim() || p.slug}
                         {p.price != null && <span className="text-slate-400 ml-1">({Number(p.price).toLocaleString()}฿)</span>}
                       </Link>
                     </li>
                   ))}
-                  <li className="pt-1"><Link href="/categories" className="text-sm font-semibold text-brand-600 hover:text-brand-700">ดูทั้งหมด &rarr;</Link></li>
+                  <li className="pt-1"><Link href="/categories" className="text-sm font-semibold text-brand-600 hover:text-brand-700">ดูหมวดสินค้า &rarr;</Link></li>
                 </ul>
               ) : (
-                <p className="text-sm text-slate-400">กำลังอัปเดตราคา</p>
+                <p className="text-sm text-slate-400">กำลังโหลดราคา…</p>
               )}
             </div>
           </div>

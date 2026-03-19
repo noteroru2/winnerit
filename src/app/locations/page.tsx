@@ -4,15 +4,12 @@ import { pageMetadata } from "@/lib/seo";
 import { getCachedLocationSlugs } from "@/lib/wp-cache";
 import { BUSINESS_INFO } from "@/lib/constants";
 import { includeHubNodeForSite } from "@/lib/site-key";
+import { isPublicListableStatus } from "@/lib/content-filters";
 
 /** ดึงรายการพื้นที่ตอน request — เหตุผลเดียวกับหน้าแรก */
 export const dynamic = "force-dynamic";
 
 export const revalidate = 86400;
-
-function isPublish(status: any) {
-  return String(status || "").toLowerCase() === "publish";
-}
 
 export const metadata: Metadata = pageMetadata({
   title: "พื้นที่บริการรับซื้อโน๊ตบุ๊ค • เลือกจังหวัด/อำเภอ | Winner IT",
@@ -28,7 +25,7 @@ export default async function Page() {
     const data = await getCachedLocationSlugs();
     const nodes = (data?.locationpages?.nodes ?? [])
       .filter((n: any) => {
-        if (!n?.slug || !isPublish(n?.status)) return false;
+        if (!n?.slug || !isPublicListableStatus(n?.status)) return false;
         return includeHubNodeForSite(n?.site);
       })
       .sort((a: any, b: any) => String(a.title || "").localeCompare(String(b.title || ""), "th"));
