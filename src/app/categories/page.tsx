@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { getCachedCategorySlugs } from "@/lib/wp-cache";
+import { fetchGqlLiveSafe } from "@/lib/wp";
+import { Q_DEVICECATEGORY_SLUGS } from "@/lib/queries";
 import { getCategoriesFromHub } from "@/lib/categories";
 import type { Metadata } from "next";
 import { pageMetadata } from "@/lib/seo";
@@ -30,7 +31,9 @@ const CATEGORY_ICONS: Record<string, string> = {
 };
 
 export default async function Page() {
-  const catRaw = await getCachedCategorySlugs();
+  const catRaw = (await fetchGqlLiveSafe<any>(Q_DEVICECATEGORY_SLUGS)) ?? {
+    devicecategories: { nodes: [] as any[] },
+  };
   const categories = getCategoriesFromHub({
     devicecategories: {
       nodes: (catRaw?.devicecategories?.nodes ?? []).filter((n: any) => includeHubNodeForSite(n?.site)),

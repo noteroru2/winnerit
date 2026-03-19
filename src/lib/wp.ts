@@ -166,6 +166,26 @@ export async function fetchGql<T>(
   return cached();
 }
 
+/**
+ * ยิง WP โดย **ไม่** ผ่าน unstable_cache / Data Cache
+ * แก้กรณี Docker build ได้ `{}` แล้วถูกแคช — หน้าแรก dynamic ยังอ่านข้อมูลว่างตลอด
+ */
+export async function fetchGqlLive<T>(query: string, variables?: any): Promise<T> {
+  return fetchGqlUncached<T>(query, variables);
+}
+
+/** fetchGqlLive + ไม่ throw — ใช้บนหน้าเว็บ */
+export async function fetchGqlLiveSafe<T>(query: string, variables?: any): Promise<T | null> {
+  try {
+    return await fetchGqlLive<T>(query, variables);
+  } catch (e) {
+    if (process.env.NODE_ENV !== "production") {
+      console.warn("[wp] fetchGqlLiveSafe failed:", (e as Error)?.message ?? e);
+    }
+    return null;
+  }
+}
+
 export async function fetchGqlSafe<T>(
   query: string,
   variables?: any

@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { pageMetadata } from "@/lib/seo";
-import { getCachedLocationSlugs } from "@/lib/wp-cache";
+import { fetchGqlLiveSafe } from "@/lib/wp";
+import { Q_LOCATION_SLUGS } from "@/lib/queries";
 import { BUSINESS_INFO } from "@/lib/constants";
 import { includeHubNodeForSite } from "@/lib/site-key";
 import { isPublicListableStatus } from "@/lib/content-filters";
@@ -22,7 +23,7 @@ export default async function Page() {
   let locations: any[] = [];
 
   try {
-    const data = await getCachedLocationSlugs();
+    const data = await fetchGqlLiveSafe<any>(Q_LOCATION_SLUGS);
     const nodes = (data?.locationpages?.nodes ?? [])
       .filter((n: any) => {
         if (!n?.slug || !isPublicListableStatus(n?.status)) return false;

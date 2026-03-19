@@ -2,14 +2,14 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { cache } from "react";
 import { notFound } from "next/navigation";
-import { siteUrl } from "@/lib/wp";
+import { siteUrl, fetchGqlLiveSafe } from "@/lib/wp";
 import {
-  getCachedHubIndex,
-  getCachedCategoryBySlug,
-  getCachedServicesList,
-  getCachedLocationpagesList,
-  getCachedPricemodelsList,
-} from "@/lib/wp-cache";
+  Q_HUB_INDEX,
+  Q_DEVICECATEGORY_BY_SLUG,
+  Q_SERVICES_LIST,
+  Q_LOCATIONPAGES_LIST,
+  Q_PRICEMODELS_LIST,
+} from "@/lib/queries";
 import { filterByCategory } from "@/lib/related";
 import { stripHtml } from "@/lib/shared";
 import { pageMetadata, inferDescriptionFromHtml } from "@/lib/seo";
@@ -40,7 +40,7 @@ function toHtml(x: any) {
 async function getCategoryPageData(slugParam: string) {
   const slug = String(slugParam || "").trim().toLowerCase();
   if (!slug) return { data: null, term: null };
-  const raw = (await getCachedHubIndex()) ?? {};
+  const raw = (await fetchGqlLiveSafe<any>(Q_HUB_INDEX)) ?? {};
   // แบบ webuy-hub-v2: ไม่กรอง site บน hub โดยค่าเริ่มต้น — ใช้ includeHubNodeForSite (เดียวกับหน้าแรก)
   const data = {
     ...raw,
@@ -53,8 +53,8 @@ async function getCategoryPageData(slugParam: string) {
     (n: any) => String(n?.slug || "").toLowerCase() === slug
   );
   if (!term?.slug) {
-    const bySlug = await getCachedCategoryBySlug(slugParam);
-    term = (bySlug as any)?.devicecategory ?? null;
+    const bySlug = await fetchGqlLiveSafe<any>(Q_DEVICECATEGORY_BY_SLUG, { slug: slugParam });
+    term = bySlug?.devicecategory ?? null;
   }
   return { data, term };
 }
@@ -93,9 +93,9 @@ export default async function Page({ params }: { params: { slug: string } }) {
   // Hub จำกัด 300/ชนิด — ถ้าหมวดนี้ไม่มีรายการเลย ลอง list เต็มจาก WP (แบบขยายขอบเขต)
   if (services.length === 0 && locations.length === 0 && prices.length === 0) {
     const [svcList, locList, priList] = await Promise.all([
-      getCachedServicesList(),
-      getCachedLocationpagesList(),
-      getCachedPricemodelsList(),
+      fetchGqlLiveSafe<any>(Q_SERVICES_LIST),
+      fetchGqlLiveSafe<any>(Q_LOCATIONPAGES_LIST),
+      fetchGqlLiveSafe<any>(Q_PRICEMODELS_LIST),
     ]);
     const svcNodes = (svcList?.services?.nodes ?? []).filter((n: any) => includeHubNodeForSite(n?.site));
     const locNodes = (locList?.locationpages?.nodes ?? []).filter((n: any) => includeHubNodeForSite(n?.site));

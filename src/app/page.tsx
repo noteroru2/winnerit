@@ -1,13 +1,13 @@
 import Link from "next/link";
 import Image from "next/image";
-import { siteUrl } from "@/lib/wp";
+import { siteUrl, fetchGqlLiveSafe } from "@/lib/wp";
 import {
-  getCachedHubIndex,
-  getCachedCategorySlugs,
-  getCachedServiceSlugs,
-  getCachedLocationSlugs,
-  getCachedPriceSlugs,
-} from "@/lib/wp-cache";
+  Q_HUB_INDEX,
+  Q_DEVICECATEGORY_SLUGS,
+  Q_SERVICE_SLUGS,
+  Q_LOCATION_SLUGS,
+  Q_PRICE_SLUGS,
+} from "@/lib/queries";
 import { getCategoriesFromHub } from "@/lib/categories";
 import { includeHubNodeForSite } from "@/lib/site-key";
 import type { Metadata } from "next";
@@ -40,8 +40,13 @@ function takePublished(nodes: any[], limit = 8) {
 }
 
 export default async function Page() {
-  const [raw, catRaw] = await Promise.all([getCachedHubIndex(), getCachedCategorySlugs()]);
-  const data = raw ?? {};
+  // ไม่ใช้ getCached* / unstable_cache ตรงนี้ — กัน Data Cache เก็บ {} จาก build แล้วหน้าแรกว่างตลอด
+  const [hubRes, catRes] = await Promise.all([
+    fetchGqlLiveSafe<any>(Q_HUB_INDEX),
+    fetchGqlLiveSafe<any>(Q_DEVICECATEGORY_SLUGS),
+  ]);
+  const data = hubRes ?? {};
+  const catRaw = catRes ?? { devicecategories: { nodes: [] as any[] } };
 
   // แบบ webuy-hub-v2: ค่าเริ่มต้นไม่กรอง site บนรายการ hub — กรองเมื่อ SITE_STRICT_HUB_LISTINGS=1
   const servicesAll = (data.services?.nodes ?? []).filter((n: any) => includeHubNodeForSite(n?.site));
@@ -60,9 +65,9 @@ export default async function Page() {
   // Hub บางครั้งว่าง (cache/field) แต่ slug query ยังมี — โชว์รายการสำรวจต่อให้ได้
   if (topServices.length === 0 || topLocations.length === 0 || topPrices.length === 0) {
     const [svcData, locData, priData] = await Promise.all([
-      topServices.length ? Promise.resolve(null) : getCachedServiceSlugs(),
-      topLocations.length ? Promise.resolve(null) : getCachedLocationSlugs(),
-      topPrices.length ? Promise.resolve(null) : getCachedPriceSlugs(),
+      topServices.length ? Promise.resolve(null) : fetchGqlLiveSafe<any>(Q_SERVICE_SLUGS),
+      topLocations.length ? Promise.resolve(null) : fetchGqlLiveSafe<any>(Q_LOCATION_SLUGS),
+      topPrices.length ? Promise.resolve(null) : fetchGqlLiveSafe<any>(Q_PRICE_SLUGS),
     ]);
     if (topServices.length === 0 && svcData?.services?.nodes?.length) {
       topServices = takePublished(
@@ -207,7 +212,7 @@ export default async function Page() {
                   <li className="pt-1"><Link href="/categories" className="text-sm font-semibold text-brand-600 hover:text-brand-700">ดูหมวดสินค้า &rarr;</Link></li>
                 </ul>
               ) : (
-                <p className="text-sm text-slate-400">กำลังโหลดบริการ…</p>
+                <p className="text-sm text-slate-400">ยังไม่มีรายการบริการ (หรือโหลดจาก CMS ไม่สำเร็จ)</p>
               )}
             </div>
 
@@ -231,7 +236,7 @@ export default async function Page() {
                   <li className="pt-1"><Link href="/locations" className="text-sm font-semibold text-brand-600 hover:text-brand-700">ดูทั้งหมด &rarr;</Link></li>
                 </ul>
               ) : (
-                <p className="text-sm text-slate-400">กำลังโหลดพื้นที่…</p>
+                <p className="text-sm text-slate-400">ยังไม่มีรายการพื้นที่ (หรือโหลดจาก CMS ไม่สำเร็จ)</p>
               )}
             </div>
 
@@ -256,7 +261,7 @@ export default async function Page() {
                   <li className="pt-1"><Link href="/categories" className="text-sm font-semibold text-brand-600 hover:text-brand-700">ดูหมวดสินค้า &rarr;</Link></li>
                 </ul>
               ) : (
-                <p className="text-sm text-slate-400">กำลังโหลดราคา…</p>
+                <p className="text-sm text-slate-400">ยังไม่มีรายการราคา (หรือโหลดจาก CMS ไม่สำเร็จ)</p>
               )}
             </div>
           </div>
