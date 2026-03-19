@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getCachedHubIndex } from "@/lib/wp-cache";
+import { getCachedCategorySlugs } from "@/lib/wp-cache";
 import { getCategoriesFromHub } from "@/lib/categories";
 import type { Metadata } from "next";
 import { pageMetadata } from "@/lib/seo";
@@ -27,15 +27,12 @@ const CATEGORY_ICONS: Record<string, string> = {
 };
 
 export default async function Page() {
-  const raw = await getCachedHubIndex();
-  const data = raw ?? {};
-  const dataForCategories = {
-    ...data,
+  const catRaw = await getCachedCategorySlugs();
+  const categories = getCategoriesFromHub({
     devicecategories: {
-      nodes: (data.devicecategories?.nodes ?? []).filter((n: any) => isSiteMatch(n?.site)),
+      nodes: (catRaw?.devicecategories?.nodes ?? []).filter((n: any) => isSiteMatch(n?.site)),
     },
-  };
-  const categories = getCategoriesFromHub(dataForCategories);
+  });
 
   return (
     <div className="min-h-[60vh]">
@@ -84,18 +81,18 @@ export default async function Page() {
         </div>
 
         {categories.length > 0 ? (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {categories.map((c) => (
               <Link
                 key={c.slug}
                 href={`/categories/${c.slug}`}
-                className="group flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-all hover:border-brand-300 hover:shadow-md"
+                className="group flex items-center gap-3 rounded-xl sm:rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-sm transition-all hover:border-brand-300 hover:shadow-md"
               >
-                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-brand-50 text-2xl transition group-hover:bg-brand-100">
+                <div className="flex h-11 w-11 sm:h-14 sm:w-14 shrink-0 items-center justify-center rounded-xl sm:rounded-2xl bg-brand-50 text-xl sm:text-2xl transition group-hover:bg-brand-100">
                   {CATEGORY_ICONS[c.slug] ?? "📦"}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="font-bold text-slate-900 group-hover:text-brand-600 transition-colors">
+                  <div className="font-bold text-slate-900 text-sm sm:text-base leading-snug line-clamp-2 group-hover:text-brand-600 transition-colors">
                     {c.name}
                   </div>
                   <div className="mt-0.5 text-sm text-slate-500">

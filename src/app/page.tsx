@@ -1,7 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { siteUrl } from "@/lib/wp";
-import { getCachedHubIndex } from "@/lib/wp-cache";
+import { getCachedHubIndex, getCachedCategorySlugs } from "@/lib/wp-cache";
 import { getCategoriesFromHub } from "@/lib/categories";
 import { isSiteMatch } from "@/lib/site-key";
 import type { Metadata } from "next";
@@ -31,19 +31,18 @@ function takePublished(nodes: any[], limit = 8) {
 }
 
 export default async function Page() {
-  const raw = await getCachedHubIndex();
+  const [raw, catRaw] = await Promise.all([getCachedHubIndex(), getCachedCategorySlugs()]);
   const data = raw ?? {};
 
   const servicesAll = (data.services?.nodes ?? []).filter((n: any) => isSiteMatch(n?.site));
   const locationsAll = (data.locationpages?.nodes ?? []).filter((n: any) => isSiteMatch(n?.site));
   const pricesAll = (data.pricemodels?.nodes ?? []).filter((n: any) => isSiteMatch(n?.site));
-  const dataForCategories = {
-    ...data,
+  // หมวด: ใช้ query แยก (first: 1000) ไม่ใช้ Hub index ที่จำกัด 300 — กันหมวดขึ้นไม่ครบ
+  const categories = getCategoriesFromHub({
     devicecategories: {
-      nodes: (data.devicecategories?.nodes ?? []).filter((n: any) => isSiteMatch(n?.site)),
+      nodes: (catRaw?.devicecategories?.nodes ?? []).filter((n: any) => isSiteMatch(n?.site)),
     },
-  };
-  const categories = getCategoriesFromHub(dataForCategories);
+  });
 
   const topServices = takePublished(servicesAll, 8);
   const topLocations = takePublished(locationsAll, 8);
@@ -120,7 +119,7 @@ export default async function Page() {
           <p className="lead mt-1">เลือกหมวดที่สนใจ เพื่อดูบริการและราคารับซื้อ</p>
         </div>
         {categories.length ? (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {categories.map((c) => {
               const icons: Record<string, string> = { notebook: "💻", mobile: "📱", tablet: "📱", computer: "🖥️", accessories: "⌨️", camera: "📷", gaming: "🎮", smartwatch: "⌚" };
               const icon = icons[c.slug] || "📦";
@@ -128,13 +127,13 @@ export default async function Page() {
                 <Link
                   key={c.slug}
                   href={`/categories/${c.slug}`}
-                  className="group flex items-center gap-4 rounded-2xl border border-slate-200/80 bg-white p-4 sm:p-5 transition-all hover:border-brand-200 hover:shadow-soft"
+                  className="group flex items-center gap-2.5 sm:gap-4 rounded-xl sm:rounded-2xl border border-slate-200/80 bg-white p-3 sm:p-5 transition-all hover:border-brand-200 hover:shadow-soft"
                 >
-                  <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-stone-50 text-xl group-hover:bg-brand-50 transition-colors">
+                  <span className="flex h-9 w-9 sm:h-11 sm:w-11 shrink-0 items-center justify-center rounded-lg sm:rounded-xl bg-stone-50 text-lg sm:text-xl group-hover:bg-brand-50 transition-colors">
                     {icon}
                   </span>
                   <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-slate-900 group-hover:text-brand-700 transition-colors">{c.name}</div>
+                    <div className="font-semibold text-slate-900 text-sm sm:text-base leading-snug group-hover:text-brand-700 transition-colors line-clamp-2">{c.name}</div>
                     {c.count > 0 && <div className="text-xs text-slate-400 mt-0.5">{c.count} รายการ</div>}
                   </div>
                   <svg className="h-4 w-4 text-slate-300 group-hover:text-brand-500 transition-colors shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>

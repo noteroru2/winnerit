@@ -1,5 +1,7 @@
 /**
- * ฟังก์ชันช่วยสำหรับหมวดสินค้า - ดึงจาก devicecategories ใน Hub โดยตรง
+ * ฟังก์ชันช่วยสำหรับหมวดสินค้า
+ * รับ shape { devicecategories: { nodes } } — แนะนำใช้ getCachedCategorySlugs() (first: 1000)
+ * แทน Hub index ที่จำกัด devicecategories แค่ 300 รายการ
  */
 export function getCategoriesFromHub(data: any): { slug: string; name: string; count: number }[] {
   const nodes = data?.devicecategories?.nodes ?? [];
