@@ -6,6 +6,9 @@ import { pageMetadata } from "@/lib/seo";
 import { BUSINESS_INFO } from "@/lib/constants";
 import { isSiteMatch } from "@/lib/site-key";
 
+/** ดึงหมวดตอน request — กันหน้า freeze จาก build ที่ WP ไม่ตอบ */
+export const dynamic = "force-dynamic";
+
 export const revalidate = 86400;
 
 export const metadata: Metadata = pageMetadata({

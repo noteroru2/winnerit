@@ -5,6 +5,9 @@ import { getCachedLocationSlugs } from "@/lib/wp-cache";
 import { BUSINESS_INFO } from "@/lib/constants";
 import { isSiteMatch } from "@/lib/site-key";
 
+/** ดึงรายการพื้นที่ตอน request — เหตุผลเดียวกับหน้าแรก */
+export const dynamic = "force-dynamic";
+
 export const revalidate = 86400;
 
 function isPublish(status: any) {

@@ -20,6 +20,9 @@ export const metadata: Metadata = pageMetadata({
   pathname: "/",
 });
 
+/** ไม่ static ตอน build — ถ้า WP 403 ระหว่าง Docker build จะได้ HTML ว่างตลอด (หมวด/บริการไม่ขึ้น) */
+export const dynamic = "force-dynamic";
+
 export const revalidate = 86400;
 
 function isPublish(status: any) {
