@@ -1,12 +1,12 @@
 /**
- * Sitemap services (segmented) — /sitemap-services/{segment}
- * รูปแบบเดียวกับ webuy (ไม่มี .xml ใน path) เพื่อให้ GSC ดึงได้
- * Segment ละ URLS_PER_SEGMENT (default 400)
+ * Sitemap services แบบ dynamic — /sitemap-services/1, /sitemap-services/2, …
+ * ใช้ Node runtime เพื่อให้ fetchGql (unstable_cache) ทำงาน — บน Edge จะได้ entries ว่าง → GSC เห็นแค่ 1 URL
+ * เหมือน webuy-hub-v2
  */
 import {
-  getEmptyUrlsetXml,
-  getMinimalSitemapXml,
-  getServiceEntriesForSegment,
+  getEmptySitemapXml,
+  getServiceSegmentsCount,
+  getServicesEntriesForSegment,
   sitemapEntriesToXml,
 } from "@/lib/sitemap-build";
 
@@ -18,17 +18,31 @@ const HEADERS = {
   "Cache-Control": "public, max-age=3600, s-maxage=3600",
 } as const;
 
-type RouteContext = { params: Promise<{ segment: string }> | { segment: string } };
+const REQUEST_TIMEOUT_MS = Number(process.env.SITEMAP_REQUEST_TIMEOUT_MS ?? "25000");
 
-export async function GET(_: Request, ctx: { params: RouteContext["params"] }) {
+export async function GET(
+  _req: Request,
+  { params }: { params: { segment: string } }
+) {
+  const raw = String(params?.segment ?? "").trim();
+  const segmentNum = Math.trunc(Number(raw)) || 0;
+  const maxSegments = await getServiceSegmentsCount();
+  if (segmentNum < 1 || segmentNum > maxSegments) {
+    return new Response(getEmptySitemapXml(), { status: 200, headers: HEADERS });
+  }
+  const segmentIndex = segmentNum - 1;
+
+  const timeoutPromise = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error("sitemap timeout")), REQUEST_TIMEOUT_MS)
+  );
   try {
-    const params = await Promise.resolve(ctx.params);
-    const seg = Number(params?.segment);
-    const entries = await getServiceEntriesForSegment(seg);
-    const xml = entries.length ? sitemapEntriesToXml(entries) : getEmptyUrlsetXml();
+    const entries = await Promise.race([
+      getServicesEntriesForSegment(segmentIndex),
+      timeoutPromise,
+    ]);
+    const xml = entries.length ? sitemapEntriesToXml(entries) : getEmptySitemapXml();
     return new Response(xml, { status: 200, headers: HEADERS });
   } catch {
-    const xml = getMinimalSitemapXml();
-    return new Response(xml, { status: 200, headers: HEADERS });
+    return new Response(getEmptySitemapXml(), { status: 200, headers: HEADERS });
   }
 }

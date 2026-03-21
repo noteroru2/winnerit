@@ -1,6 +1,7 @@
 /**
- * Sitemap Index — /sitemap.xml รวมลิงก์ไปยัง sitemap ย่อย (แยกตามหมวด)
- * ไม่ throw เพื่อให้ GSC ดึงได้เสมอ
+ * Sitemap Index — /sitemap.xml รวมลิงก์ไปยัง sitemap ย่อย
+ * services ใช้ /sitemap-services/1 … /sitemap-services/N (segment ละ 400 URLs)
+ * ลำดับเดียวกับ webuy-hub-v2
  */
 import { siteUrl } from "@/lib/wp";
 import { buildSitemapIndexXml, getServiceSegmentsCount } from "@/lib/sitemap-build";
@@ -16,21 +17,20 @@ const HEADERS = {
 export async function GET() {
   try {
     const base = siteUrl().replace(/\/$/, "");
-    const serviceSegments = await getServiceSegmentsCount().catch(() => 1);
+    const segments = await getServiceSegmentsCount();
     const sitemaps: { loc: string }[] = [
       { loc: `${base}/sitemap-pages.xml` },
       { loc: `${base}/sitemap-locations.xml` },
+      ...Array.from({ length: segments }, (_, i) => ({
+        loc: `${base}/sitemap-services/${i + 1}`,
+      })),
       { loc: `${base}/sitemap-categories.xml` },
       { loc: `${base}/sitemap-prices.xml` },
     ];
-    // services แยกเป็น segment 1..N (อย่าลิสต์เกินจริง)
-    for (let i = 1; i <= serviceSegments; i++) {
-      sitemaps.push({ loc: `${base}/sitemap-services/${i}` });
-    }
     const xml = buildSitemapIndexXml(sitemaps);
     return new Response(xml, { status: 200, headers: HEADERS });
   } catch {
-    const base = siteUrl().replace(/\/$/, "") || "https://example.com";
+    const base = siteUrl().replace(/\/$/, "") || "https://winnerit.in.th";
     const xml = buildSitemapIndexXml([{ loc: `${base}/sitemap-pages.xml` }]);
     return new Response(xml, { status: 200, headers: HEADERS });
   }
