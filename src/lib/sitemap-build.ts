@@ -1,10 +1,11 @@
 /**
  * Logic สำหรับ build รายการ sitemap — ใช้ทั้ง metadata sitemap และ route ที่ส่ง XML พร้อม declaration
- * ใช้ getCached* จาก wp-cache เพื่อแชร์ cache กับหน้าอื่น (ลด query ซ้ำ)
+ * Pagination ใช้ fetchGqlLive (ไม่แคชรายหน้า) — รายการรวมยังใช้ unstable_cache ต่อรอบ
  */
 import { unstable_cache } from "next/cache";
-import { fetchGql, siteUrl } from "@/lib/wp";
-import { getSiteKey, isSiteMatch } from "@/lib/site-key";
+import { fetchGqlLive, siteUrl } from "@/lib/wp";
+import { getSiteKey, includeHubNodeForSite } from "@/lib/site-key";
+import { isPublicListableStatus } from "@/lib/content-filters";
 import {
   Q_SERVICE_SLUGS_PAGINATED,
   Q_LOCATION_SLUGS_PAGINATED,
@@ -28,8 +29,9 @@ const SITEMAP_MAX_PAGES = 20;
 /** content ที่เยอะ: services (default สูงกว่า) */
 const SITEMAP_SERVICE_MAX_PAGES = Number(process.env.SITEMAP_SERVICE_MAX_PAGES) || 50;
 
-function isPublish(status: any) {
-  return String(status || "").toLowerCase() === "publish";
+/** รายการใน sitemap: สอดคล้องหน้าเว็บ (รวม status ว่าง) + กรอง site แบบ hub */
+function sitemapIncludePublishedNode(n: { status?: string; site?: string }): boolean {
+  return isPublicListableStatus(n?.status) && includeHubNodeForSite(n?.site);
 }
 
 export type SitemapEntry = {
@@ -149,12 +151,12 @@ function withRouteTimeout<T>(promise: Promise<T>): Promise<T> {
 
 async function fetchOne<T>(
   query: string,
-  revalidate = SITEMAP_REVALIDATE,
+  _revalidateUnused = SITEMAP_REVALIDATE,
   variables?: Record<string, unknown>
 ): Promise<T | null> {
   try {
     return await withTimeout(
-      fetchGql<T>(query, variables, { revalidate }),
+      fetchGqlLive<T>(query, variables),
       SITEMAP_WP_TIMEOUT_MS,
       "sitemap WP timeout"
     );
@@ -223,9 +225,9 @@ export async function getAllServiceSlugNodes(): Promise<SlugNode[]> {
         (d) => d?.services,
         SITEMAP_SERVICE_MAX_PAGES
       );
-      return toSlugNodes(nodes, (n) => isPublish(n?.status) && isSiteMatch(n?.site));
+      return toSlugNodes(nodes, (n) => sitemapIncludePublishedNode(n));
     },
-    cacheKey("services-all-slugs"),
+    cacheKey("services-all-slugs-v2"),
     { revalidate: SITEMAP_REVALIDATE, tags: ["sitemap", "wp"] }
   );
   if (!inFlightServices) inFlightServices = cached().finally(() => (inFlightServices = null));
@@ -240,9 +242,9 @@ export async function getAllLocationSlugNodes(): Promise<SlugNode[]> {
         (d) => d?.locationpages,
         SITEMAP_MAX_PAGES
       );
-      return toSlugNodes(nodes, (n) => isPublish(n?.status) && isSiteMatch(n?.site));
+      return toSlugNodes(nodes, (n) => sitemapIncludePublishedNode(n));
     },
-    cacheKey("locations-all-slugs"),
+    cacheKey("locations-all-slugs-v2"),
     { revalidate: SITEMAP_REVALIDATE, tags: ["sitemap", "wp"] }
   );
   if (!inFlightLocations) inFlightLocations = cached().finally(() => (inFlightLocations = null));
@@ -257,9 +259,9 @@ export async function getAllPriceSlugNodes(): Promise<SlugNode[]> {
         (d) => d?.pricemodels,
         SITEMAP_MAX_PAGES
       );
-      return toSlugNodes(nodes, (n) => isPublish(n?.status) && isSiteMatch(n?.site));
+      return toSlugNodes(nodes, (n) => sitemapIncludePublishedNode(n));
     },
-    cacheKey("prices-all-slugs"),
+    cacheKey("prices-all-slugs-v2"),
     { revalidate: SITEMAP_REVALIDATE, tags: ["sitemap", "wp"] }
   );
   if (!inFlightPrices) inFlightPrices = cached().finally(() => (inFlightPrices = null));
@@ -274,9 +276,9 @@ export async function getAllCategorySlugNodes(): Promise<SlugNode[]> {
         (d) => d?.devicecategories,
         SITEMAP_MAX_PAGES
       );
-      return toSlugNodes(nodes, (n) => isSiteMatch(n?.site));
+      return toSlugNodes(nodes, (n) => includeHubNodeForSite(n?.site));
     },
-    cacheKey("categories-all-slugs"),
+    cacheKey("categories-all-slugs-v2"),
     { revalidate: SITEMAP_REVALIDATE, tags: ["sitemap", "wp"] }
   );
   if (!inFlightCategories) inFlightCategories = cached().finally(() => (inFlightCategories = null));
@@ -291,7 +293,7 @@ export async function getServiceSegmentsCount(): Promise<number> {
       const count = Math.max(1, Math.ceil(total / URLS_PER_SEGMENT));
       return Math.min(count, SEGMENTS_MAX);
     },
-    cacheKey("services-segments-count"),
+    cacheKey("services-segments-count-v2"),
     { revalidate: SITEMAP_REVALIDATE, tags: ["sitemap", "wp"] }
   );
   return cached();
@@ -325,7 +327,7 @@ export async function getLocationsEntries(): Promise<SitemapEntry[]> {
   );
   const items: SitemapEntry[] = [];
   for (const n of nodes) {
-    if (!n?.slug || !isPublish(n?.status) || !isSiteMatch(n?.site)) continue;
+    if (!n?.slug || !sitemapIncludePublishedNode(n)) continue;
     items.push({ url: `${base}/locations/${n.slug}`, lastModified: now, changeFrequency: "weekly", priority: 0.8 });
   }
   return items;
@@ -354,7 +356,7 @@ export async function getCategoriesEntries(): Promise<SitemapEntry[]> {
   );
   const items: SitemapEntry[] = [];
   for (const n of nodes) {
-    if (!n?.slug || !isSiteMatch(n?.site)) continue;
+    if (!n?.slug || !includeHubNodeForSite(n?.site)) continue;
     items.push({ url: `${base}/categories/${n.slug}`, lastModified: now, changeFrequency: "weekly", priority: 0.6 });
   }
   return items;
@@ -370,7 +372,7 @@ export async function getPricesEntries(): Promise<SitemapEntry[]> {
   );
   const items: SitemapEntry[] = [];
   for (const n of nodes) {
-    if (!n?.slug || !isPublish(n?.status) || !isSiteMatch(n?.site)) continue;
+    if (!n?.slug || !sitemapIncludePublishedNode(n)) continue;
     items.push({ url: `${base}/prices/${n.slug}`, lastModified: now, changeFrequency: "weekly", priority: 0.7 });
   }
   return items;
