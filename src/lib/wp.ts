@@ -1,41 +1,37 @@
-// src/lib/wp.ts
+// src/lib/wp.ts — โครงเดียวกับ webuy-hub-v2 + แยก cache ตาม SITE_KEY
 import { unstable_cache } from "next/cache";
 import { getSiteKey } from "@/lib/site-key";
 
-// บน Vercel (build + production): timeout สั้น + ไม่ retry + fallback เมื่อ error → build ไม่ค้าง 120s
 const isVercel = process.env.VERCEL === "1";
 const isVercelProduction = isVercel && process.env.NODE_ENV === "production";
-const isProd = process.env.NODE_ENV === "production";
 const TIMEOUT = Number(
   process.env.WP_FETCH_TIMEOUT_MS ||
-  (isVercelProduction ? 8000 : 45000)
+    (isVercelProduction ? 8000 : 45000)
 );
-/** Production (รวม Coolify): default 0 — กัน retry ซ้ำยิง WP ตอน GraphQL คืน Internal server error */
 const RETRY = Number(
-  process.env.WP_FETCH_RETRY ?? (isProd ? 0 : 3)
+  process.env.WP_FETCH_RETRY ?? (isVercelProduction ? 0 : 3)
 );
 
 const REQUEST_DELAY_MS = Number(
-  process.env.WP_REQUEST_DELAY_MS ?? (isVercel ? 200 : isProd ? 400 : 2000)
-); // self-hosted prod: 400ms ระหว่างคำขอ ลด stampede
+  process.env.WP_REQUEST_DELAY_MS ?? (isVercel ? 200 : 400)
+);
 let lastRequestTime = 0;
 let requestCount = 0;
 
-/** คิวคำขอ GraphQL ต่อ process — กัน Promise.all หลายคำขอชน WP พร้อมกัน */
-let gqlQueue: Promise<unknown> = Promise.resolve();
-const SERIALIZE_WP =
-  process.env.WP_SERIALIZE_GRAPHQL === "1" ||
-  String(process.env.WP_SERIALIZE_GRAPHQL).toLowerCase() === "true";
+const DEFAULT_SITE_URL = "https://webuy.in.th";
 
-function shouldAbortRetries(message: string): boolean {
-  if (/returned (500|502|503|504)/.test(message)) return true;
-  if (/internal server error/i.test(message)) return true;
-  if (/GraphQL errors:/i.test(message) && /internal server error/i.test(message)) return true;
-  if (/bad gateway|service unavailable|gateway timeout/i.test(message)) return true;
-  return false;
+/** ระหว่าง `next build` — รวมกรณีรันผ่าน npm และบาง CI ที่ตั้ง NEXT_PHASE */
+export function isNextjsProductionBuild(): boolean {
+  return (
+    process.env.npm_lifecycle_event === "build" ||
+    process.env.NEXT_PHASE === "phase-production-build"
+  );
 }
 
-const DEFAULT_SITE_URL = "https://webuy.in.th";
+/** ต่อท้าย cache key — ตั้งเลขใหม่เมื่อ deploy เพื่อล้างแคช WP ที่ค้างบน disk (Coolify volume) */
+export function wpCacheKeySuffix(): string {
+  return String(process.env.WP_CACHE_REVISION ?? "").trim();
+}
 
 export function siteUrl(): string {
   const raw =
@@ -54,25 +50,22 @@ export function siteUrl(): string {
   }
 }
 
-async function doFetchOnce(body: any) {
-  // 🔧 Rate Limiting: รอให้ผ่านไป REQUEST_DELAY_MS ก่อนส่ง request ใหม่
-  const now = Date.now();
-  const elapsed = now - lastRequestTime;
+async function doFetch(body: any, opts?: { skipDelay?: boolean }) {
+  if (!opts?.skipDelay) {
+    const now = Date.now();
+    const elapsed = now - lastRequestTime;
 
-  if (elapsed < REQUEST_DELAY_MS && lastRequestTime > 0) {
-    const waitTime = REQUEST_DELAY_MS - elapsed;
-    if (process.env.NODE_ENV !== "production") {
-      console.log(`⏳ [Rate Limit] Waiting ${waitTime}ms before next request...`);
+    if (elapsed < REQUEST_DELAY_MS && lastRequestTime > 0) {
+      const waitTime = REQUEST_DELAY_MS - elapsed;
+      if (process.env.NODE_ENV !== "production") {
+        console.log(`⏳ [Rate Limit] Waiting ${waitTime}ms before next request...`);
+      }
+      await new Promise((resolve) => setTimeout(resolve, waitTime));
     }
-    await new Promise((resolve) => setTimeout(resolve, waitTime));
   }
 
   lastRequestTime = Date.now();
   requestCount++;
-
-  if (process.env.NODE_ENV !== "production") {
-    console.log(`🔍 [Request #${requestCount}] Fetching from WordPress...`);
-  }
 
   const url =
     process.env.WP_GRAPHQL_URL ||
@@ -82,7 +75,6 @@ async function doFetchOnce(body: any) {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
-  // ส่ง X-WEBUY-SECRET เฉพาะเมื่อตั้งค่าและไม่ได้ปิดส่ง (ถ้า WP ยังไม่ตรวจ secret หรือใส่ค่าผิดแล้ว 404 ให้ตั้ง WEBUY_GQL_SEND_SECRET=0)
   const sendSecret =
     process.env.WEBUY_GQL_SECRET &&
     process.env.WEBUY_GQL_SEND_SECRET !== "0" &&
@@ -109,8 +101,14 @@ async function doFetchOnce(body: any) {
 
     const json = await res.json();
     if (json.errors?.length) {
-      const msg = json.errors.map((e: any) => e?.message || String(e)).join("; ");
-      throw new Error(msg);
+      const parts = json.errors.map((e: any) => e?.message || String(e)).filter(Boolean);
+      const unique = Array.from(new Set(parts));
+      const msg = unique.join("; ") || "GraphQL error";
+      throw new Error(`GraphQL: ${msg}`);
+    }
+    if (process.env.NODE_ENV !== "production" && process.env.WP_LOG_REQUESTS === "1") {
+      const size = JSON.stringify(json).length;
+      console.log(`[WP #${requestCount}] ${res.status} ${(size / 1024).toFixed(1)}KB`);
     }
     return json.data ?? json;
   } finally {
@@ -118,47 +116,35 @@ async function doFetchOnce(body: any) {
   }
 }
 
-function doFetch(body: any): Promise<any> {
-  if (!SERIALIZE_WP) {
-    return doFetchOnce(body);
-  }
-  const next = gqlQueue.then(() => doFetchOnce(body), () => doFetchOnce(body));
-  gqlQueue = next.then(
-    () => undefined,
-    () => undefined
-  );
-  return next;
-}
-
 /**
- * ระหว่าง `next build` (Docker/Coolify/CI) ไม่มี VERCEL=1 แต่ NODE_ENV=production
- * → ถ้าไม่เปิด fallback การยิง WP ที่ได้ 403/timeout จะ throw แล้ว build ล้มที่ "Generating static pages"
+ * When true, return {} instead of throwing on fetch failure.
+ * - Runtime บน VPS (`next start`): **ปิด** โดยค่าเริ่มต้น — ถ้าเปิด WP_FALLBACK_ON_ERROR=1 จะเห็น log ซ้ำและข้อมูลว่าง
+ * - Vercel production / `npm run build` / development: ตาม webuy-hub-v2
  */
-const isNextProductionBuild =
-  process.env.NEXT_PHASE === "phase-production-build" ||
-  process.env.npm_lifecycle_event === "build" ||
-  process.env.CI === "true";
-
-/** When true, return {} instead of throwing on fetch failure. */
 const FALLBACK_ON_ERROR = (() => {
   const explicit = process.env.WP_FALLBACK_ON_ERROR;
   if (explicit === "0" || explicit === "false") return false;
   if (explicit === "1" || explicit === "true") return true;
-  if (isVercelProduction) return true; // build + runtime on Vercel
-  if (process.env.NODE_ENV === "development") return true;
-  if (isNextProductionBuild) return true; // Coolify / Nixpacks / `npm run build`
-  return false;
+  if (isVercelProduction) return true;
+  if (isNextjsProductionBuild()) return true;
+  return process.env.NODE_ENV === "development";
 })();
 
-/** โหลดข้อมูลจริง (ไม่ผ่าน cache) — ใช้ภายใน fetchGql ที่ wrap ด้วย unstable_cache */
+function wpGqlCacheKey(query: string, variables?: unknown): string[] {
+  const rev = wpCacheKeySuffix();
+  const base = ["wp-gql", getSiteKey(), query, JSON.stringify(variables ?? "")];
+  return rev ? [base[0], base[1], rev, base[2], base[3]] : base;
+}
+
 async function fetchGqlUncached<T>(
   query: string,
-  variables?: any
+  variables?: any,
+  opts?: { skipDelay?: boolean }
 ): Promise<T> {
   let lastErr: any;
   for (let i = 0; i <= RETRY; i++) {
     try {
-      const raw = await doFetch({ query, variables });
+      const raw = await doFetch({ query, variables }, { skipDelay: opts?.skipDelay });
       if (raw?.errors?.length) {
         const msg = raw.errors.map((e: any) => e.message || String(e)).join("; ");
         throw new Error(`GraphQL errors: ${msg}`);
@@ -167,8 +153,8 @@ async function fetchGqlUncached<T>(
     } catch (e) {
       lastErr = e;
       const msg = (e as Error)?.message ?? "";
-      // ไม่ retry เมื่อ WP/GraphQL ล้มหรือ overload — กันยิงซ้ำจนเว็บ/CMS พังหนักขึ้น
-      if (shouldAbortRetries(msg)) break;
+      if (/returned (500|502|503)/.test(msg)) break;
+      if (/^GraphQL:/.test(msg) || /^GraphQL errors:/.test(msg)) break;
     }
   }
   if (FALLBACK_ON_ERROR) {
@@ -178,34 +164,52 @@ async function fetchGqlUncached<T>(
   throw lastErr;
 }
 
-/** Optional cache options (e.g. next revalidate). ใช้ unstable_cache เพื่อให้ build แรกโหลด query เดิมครั้งเดียว แล้วทุกหน้าที่ใช้ query เดิมได้ cache — ลดเวลา build มาก */
+/**
+ * ใช้ unstable_cache ตอน runtime เท่านั้น — ตอน build ถ้า WP ล่มได้ {} อย่าเขียนลงแคช
+ */
 export async function fetchGql<T>(
   query: string,
   variables?: any,
-  options?: { revalidate?: number }
+  options?: { revalidate?: number; noDataCache?: boolean; skipDelay?: boolean }
 ): Promise<T> {
-  const revalidate = options?.revalidate ?? 86400; // 24 ชม. default กัน WP ล่ม
-  const cacheKey = ["wp-gql", getSiteKey(), query, JSON.stringify(variables ?? "")];
+  const revalidate = options?.revalidate ?? 86400;
+  const uncachedOpts = { skipDelay: options?.skipDelay };
+  if (isNextjsProductionBuild() || options?.noDataCache) {
+    return fetchGqlUncached<T>(query, variables, uncachedOpts);
+  }
+  const cacheKey = wpGqlCacheKey(query, variables);
   const cached = unstable_cache(
-    () => fetchGqlUncached<T>(query, variables),
+    () => fetchGqlUncached<T>(query, variables, uncachedOpts),
     cacheKey,
     { revalidate, tags: ["wp"] }
   );
   return cached();
 }
 
-/**
- * ยิง WP โดย **ไม่** ผ่าน unstable_cache / Data Cache
- * แก้กรณี Docker build ได้ `{}` แล้วถูกแคช — หน้าแรก dynamic ยังอ่านข้อมูลว่างตลอด
- */
-export async function fetchGqlLive<T>(query: string, variables?: any): Promise<T> {
-  return fetchGqlUncached<T>(query, variables);
+export async function fetchGqlSafe<T>(
+  query: string,
+  variables?: any,
+  options?: { revalidate?: number; noDataCache?: boolean; skipDelay?: boolean }
+): Promise<T | null> {
+  try {
+    return await fetchGql<T>(query, variables, options);
+  } catch {
+    return null;
+  }
 }
 
-/** fetchGqlLive + ไม่ throw — ใช้บนหน้าเว็บ */
-export async function fetchGqlLiveSafe<T>(query: string, variables?: any): Promise<T | null> {
+/** ยิง WP โดยไม่ผ่าน unstable_cache ของ fetchGql — ใช้เมื่อต้องการข้อมูลสด */
+export async function fetchGqlLive<T>(query: string, variables?: any, opts?: { skipDelay?: boolean }): Promise<T> {
+  return fetchGqlUncached<T>(query, variables, opts);
+}
+
+export async function fetchGqlLiveSafe<T>(
+  query: string,
+  variables?: any,
+  opts?: { skipDelay?: boolean }
+): Promise<T | null> {
   try {
-    return await fetchGqlLive<T>(query, variables);
+    return await fetchGqlLive<T>(query, variables, opts);
   } catch (e) {
     if (process.env.NODE_ENV !== "production") {
       console.warn("[wp] fetchGqlLiveSafe failed:", (e as Error)?.message ?? e);
@@ -214,18 +218,6 @@ export async function fetchGqlLiveSafe<T>(query: string, variables?: any): Promi
   }
 }
 
-export async function fetchGqlSafe<T>(
-  query: string,
-  variables?: any
-): Promise<T | null> {
-  try {
-    return await fetchGql<T>(query, variables);
-  } catch {
-    return null;
-  }
-}
-
-/** Extract category slugs from a node (devicecategories.nodes หรือ category field) */
 export function nodeCats(node: any): string[] {
   const nodes = node?.devicecategories?.nodes ?? [];
   const fromNodes = nodes.map((n: any) => String(n?.slug ?? "").trim()).filter(Boolean);

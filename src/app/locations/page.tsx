@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { pageMetadata } from "@/lib/seo";
-import { fetchGqlLiveSafe } from "@/lib/wp";
+import { fetchGqlSafe } from "@/lib/wp";
 import { Q_LOCATION_SLUGS } from "@/lib/queries";
 import { BUSINESS_INFO } from "@/lib/constants";
 import { includeHubNodeForSite } from "@/lib/site-key";
@@ -23,7 +23,10 @@ export default async function Page() {
   let locations: any[] = [];
 
   try {
-    const data = await fetchGqlLiveSafe<any>(Q_LOCATION_SLUGS);
+    const data = await fetchGqlSafe<any>(Q_LOCATION_SLUGS, undefined, {
+      revalidate: 86400,
+      noDataCache: true,
+    });
     const nodes = (data?.locationpages?.nodes ?? [])
       .filter((n: any) => {
         if (!n?.slug || !isPublicListableStatus(n?.status)) return false;

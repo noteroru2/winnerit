@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { cache } from "react";
 import { notFound } from "next/navigation";
-import { siteUrl, fetchGqlLiveSafe } from "@/lib/wp";
+import { siteUrl, fetchGqlSafe } from "@/lib/wp";
+import { getHubIndex } from "@/lib/wp-deduped";
 import {
-  Q_HUB_INDEX,
   Q_DEVICECATEGORY_BY_SLUG,
   Q_SERVICES_LIST,
   Q_LOCATIONPAGES_LIST,
@@ -40,7 +40,7 @@ function toHtml(x: any) {
 async function getCategoryPageData(slugParam: string) {
   const slug = String(slugParam || "").trim().toLowerCase();
   if (!slug) return { data: null, term: null };
-  const raw = (await fetchGqlLiveSafe<any>(Q_HUB_INDEX)) ?? {};
+  const raw = (await getHubIndex()) ?? {};
   // แบบ webuy-hub-v2: ไม่กรอง site บน hub โดยค่าเริ่มต้น — ใช้ includeHubNodeForSite (เดียวกับหน้าแรก)
   const data = {
     ...raw,
@@ -53,7 +53,11 @@ async function getCategoryPageData(slugParam: string) {
     (n: any) => String(n?.slug || "").toLowerCase() === slug
   );
   if (!term?.slug) {
-    const bySlug = await fetchGqlLiveSafe<any>(Q_DEVICECATEGORY_BY_SLUG, { slug: slugParam });
+    const bySlug = await fetchGqlSafe<any>(
+      Q_DEVICECATEGORY_BY_SLUG,
+      { slug: slugParam },
+      { revalidate: 86400, noDataCache: true }
+    );
     term = bySlug?.devicecategory ?? null;
   }
   return { data, term };
@@ -92,10 +96,11 @@ export default async function Page({ params }: { params: { slug: string } }) {
 
   // Hub จำกัด 300/ชนิด — ถ้าหมวดนี้ไม่มีรายการเลย ลอง list เต็มจาก WP (แบบขยายขอบเขต)
   if (services.length === 0 && locations.length === 0 && prices.length === 0) {
+    const listOpts = { revalidate: 86400 as const, noDataCache: true as const };
     const [svcList, locList, priList] = await Promise.all([
-      fetchGqlLiveSafe<any>(Q_SERVICES_LIST),
-      fetchGqlLiveSafe<any>(Q_LOCATIONPAGES_LIST),
-      fetchGqlLiveSafe<any>(Q_PRICEMODELS_LIST),
+      fetchGqlSafe<any>(Q_SERVICES_LIST, undefined, listOpts),
+      fetchGqlSafe<any>(Q_LOCATIONPAGES_LIST, undefined, listOpts),
+      fetchGqlSafe<any>(Q_PRICEMODELS_LIST, undefined, listOpts),
     ]);
     const svcNodes = (svcList?.services?.nodes ?? []).filter((n: any) => includeHubNodeForSite(n?.site));
     const locNodes = (locList?.locationpages?.nodes ?? []).filter((n: any) => includeHubNodeForSite(n?.site));

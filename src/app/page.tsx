@@ -1,13 +1,10 @@
 import Link from "next/link";
 import Image from "next/image";
-import { siteUrl, fetchGqlLiveSafe } from "@/lib/wp";
-import {
-  Q_HUB_INDEX,
-  Q_DEVICECATEGORY_SLUGS,
-  Q_SERVICE_SLUGS,
-  Q_LOCATION_SLUGS,
-  Q_PRICE_SLUGS,
-} from "@/lib/queries";
+import { unstable_noStore as noStore } from "next/cache";
+import { siteUrl, fetchGqlSafe } from "@/lib/wp";
+import { getHubIndex } from "@/lib/wp-deduped";
+import { getCachedCategorySlugs } from "@/lib/wp-cache";
+import { Q_SERVICE_SLUGS, Q_LOCATION_SLUGS, Q_PRICE_SLUGS } from "@/lib/queries";
 import { getCategoriesFromHub } from "@/lib/categories";
 import { includeHubNodeForSite } from "@/lib/site-key";
 import type { Metadata } from "next";
@@ -39,14 +36,16 @@ function takePublished(nodes: any[], limit = 8) {
     .slice(0, limit);
 }
 
+const listOpts = { revalidate: 86400 as const, noDataCache: true as const };
+
 export default async function Page() {
-  // ไม่ใช้ getCached* / unstable_cache ตรงนี้ — กัน Data Cache เก็บ {} จาก build แล้วหน้าแรกว่างตลอด
-  const [hubRes, catRes] = await Promise.all([
-    fetchGqlLiveSafe<any>(Q_HUB_INDEX),
-    fetchGqlLiveSafe<any>(Q_DEVICECATEGORY_SLUGS),
+  /* แบบ webuy-hub-v2: hub แยกคิวรี + cache — ไม่ใช้ HTML build ที่อาจว่าง */
+  noStore();
+  const [hubRaw, catRaw] = await Promise.all([
+    getHubIndex(),
+    getCachedCategorySlugs().catch(() => ({ devicecategories: { nodes: [] as any[] } })),
   ]);
-  const data = hubRes ?? {};
-  const catRaw = catRes ?? { devicecategories: { nodes: [] as any[] } };
+  const data = hubRaw ?? {};
 
   // แบบ webuy-hub-v2: ค่าเริ่มต้นไม่กรอง site บนรายการ hub — กรองเมื่อ SITE_STRICT_HUB_LISTINGS=1
   const servicesAll = (data.services?.nodes ?? []).filter((n: any) => includeHubNodeForSite(n?.site));
@@ -65,9 +64,9 @@ export default async function Page() {
   // Hub บางครั้งว่าง (cache/field) แต่ slug query ยังมี — โชว์รายการสำรวจต่อให้ได้
   if (topServices.length === 0 || topLocations.length === 0 || topPrices.length === 0) {
     const [svcData, locData, priData] = await Promise.all([
-      topServices.length ? Promise.resolve(null) : fetchGqlLiveSafe<any>(Q_SERVICE_SLUGS),
-      topLocations.length ? Promise.resolve(null) : fetchGqlLiveSafe<any>(Q_LOCATION_SLUGS),
-      topPrices.length ? Promise.resolve(null) : fetchGqlLiveSafe<any>(Q_PRICE_SLUGS),
+      topServices.length ? Promise.resolve(null) : fetchGqlSafe<any>(Q_SERVICE_SLUGS, undefined, listOpts),
+      topLocations.length ? Promise.resolve(null) : fetchGqlSafe<any>(Q_LOCATION_SLUGS, undefined, listOpts),
+      topPrices.length ? Promise.resolve(null) : fetchGqlSafe<any>(Q_PRICE_SLUGS, undefined, listOpts),
     ]);
     if (topServices.length === 0 && svcData?.services?.nodes?.length) {
       topServices = takePublished(

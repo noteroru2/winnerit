@@ -232,6 +232,36 @@ export const Q_HUB_INDEX = /* GraphQL */ `
   }
 `;
 
+/** แยก root ละคิวรี (first: 100) — แบบ webuy-hub-v2 ลด WP 500 จาก query ใหญ่ชุดเดียว */
+export const Q_HUB_SERVICES = /* GraphQL */ `
+  query HubServices {
+    services(first: 100) {
+      nodes { id title slug status category site icon devicecategories { nodes { slug } } }
+    }
+  }
+`;
+export const Q_HUB_LOCATIONPAGES = /* GraphQL */ `
+  query HubLocations {
+    locationpages(first: 100) {
+      nodes { id title slug status province district site devicecategories { nodes { slug } } }
+    }
+  }
+`;
+export const Q_HUB_PRICEMODELS = /* GraphQL */ `
+  query HubPrices {
+    pricemodels(first: 100) {
+      nodes { id title slug status device price condition site devicecategories { nodes { slug } } }
+    }
+  }
+`;
+export const Q_HUB_DEVICECATEGORIES = /* GraphQL */ `
+  query HubDeviceCategories {
+    devicecategories(first: 100) {
+      nodes { id name slug description icon site }
+    }
+  }
+`;
+
 /**
  * Lightweight index for service detail pages (related sections only).
  * Avoids fetching services + devicecategories which aren't needed to compute related links.
