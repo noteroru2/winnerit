@@ -5,19 +5,35 @@ import { getSiteKey } from "@/lib/site-key";
 // บน Vercel (build + production): timeout สั้น + ไม่ retry + fallback เมื่อ error → build ไม่ค้าง 120s
 const isVercel = process.env.VERCEL === "1";
 const isVercelProduction = isVercel && process.env.NODE_ENV === "production";
+const isProd = process.env.NODE_ENV === "production";
 const TIMEOUT = Number(
   process.env.WP_FETCH_TIMEOUT_MS ||
   (isVercelProduction ? 8000 : 45000)
 );
+/** Production (รวม Coolify): default 0 — กัน retry ซ้ำยิง WP ตอน GraphQL คืน Internal server error */
 const RETRY = Number(
-  process.env.WP_FETCH_RETRY ?? (isVercelProduction ? 0 : 3)
+  process.env.WP_FETCH_RETRY ?? (isProd ? 0 : 3)
 );
 
 const REQUEST_DELAY_MS = Number(
-  process.env.WP_REQUEST_DELAY_MS ?? (isVercel ? 200 : 2000)
-); // แบบ webuy-hub-v2: Vercel 200ms
+  process.env.WP_REQUEST_DELAY_MS ?? (isVercel ? 200 : isProd ? 400 : 2000)
+); // self-hosted prod: 400ms ระหว่างคำขอ ลด stampede
 let lastRequestTime = 0;
 let requestCount = 0;
+
+/** คิวคำขอ GraphQL ต่อ process — กัน Promise.all หลายคำขอชน WP พร้อมกัน */
+let gqlQueue: Promise<unknown> = Promise.resolve();
+const SERIALIZE_WP =
+  process.env.WP_SERIALIZE_GRAPHQL === "1" ||
+  String(process.env.WP_SERIALIZE_GRAPHQL).toLowerCase() === "true";
+
+function shouldAbortRetries(message: string): boolean {
+  if (/returned (500|502|503|504)/.test(message)) return true;
+  if (/internal server error/i.test(message)) return true;
+  if (/GraphQL errors:/i.test(message) && /internal server error/i.test(message)) return true;
+  if (/bad gateway|service unavailable|gateway timeout/i.test(message)) return true;
+  return false;
+}
 
 const DEFAULT_SITE_URL = "https://webuy.in.th";
 
@@ -38,23 +54,23 @@ export function siteUrl(): string {
   }
 }
 
-async function doFetch(body: any) {
+async function doFetchOnce(body: any) {
   // 🔧 Rate Limiting: รอให้ผ่านไป REQUEST_DELAY_MS ก่อนส่ง request ใหม่
   const now = Date.now();
   const elapsed = now - lastRequestTime;
-  
+
   if (elapsed < REQUEST_DELAY_MS && lastRequestTime > 0) {
     const waitTime = REQUEST_DELAY_MS - elapsed;
-    if (process.env.NODE_ENV !== 'production') {
+    if (process.env.NODE_ENV !== "production") {
       console.log(`⏳ [Rate Limit] Waiting ${waitTime}ms before next request...`);
     }
-    await new Promise(resolve => setTimeout(resolve, waitTime));
+    await new Promise((resolve) => setTimeout(resolve, waitTime));
   }
-  
+
   lastRequestTime = Date.now();
   requestCount++;
-  
-  if (process.env.NODE_ENV !== 'production') {
+
+  if (process.env.NODE_ENV !== "production") {
     console.log(`🔍 [Request #${requestCount}] Fetching from WordPress...`);
   }
 
@@ -102,6 +118,18 @@ async function doFetch(body: any) {
   }
 }
 
+function doFetch(body: any): Promise<any> {
+  if (!SERIALIZE_WP) {
+    return doFetchOnce(body);
+  }
+  const next = gqlQueue.then(() => doFetchOnce(body), () => doFetchOnce(body));
+  gqlQueue = next.then(
+    () => undefined,
+    () => undefined
+  );
+  return next;
+}
+
 /**
  * ระหว่าง `next build` (Docker/Coolify/CI) ไม่มี VERCEL=1 แต่ NODE_ENV=production
  * → ถ้าไม่เปิด fallback การยิง WP ที่ได้ 403/timeout จะ throw แล้ว build ล้มที่ "Generating static pages"
@@ -138,9 +166,9 @@ async function fetchGqlUncached<T>(
       return (raw?.data ?? raw) as T;
     } catch (e) {
       lastErr = e;
-      // ไม่ retry เมื่อ WP คืน 5xx (ล้มหรือ overload) — ลดเวลา build timeout
       const msg = (e as Error)?.message ?? "";
-      if (/returned (500|502|503)/.test(msg)) break;
+      // ไม่ retry เมื่อ WP/GraphQL ล้มหรือ overload — กันยิงซ้ำจนเว็บ/CMS พังหนักขึ้น
+      if (shouldAbortRetries(msg)) break;
     }
   }
   if (FALLBACK_ON_ERROR) {
