@@ -31,18 +31,27 @@ function pickPrimaryCategory(node: any) {
   return withDesc || cats[0];
 }
 
-/** Request-deduped: metadata และ page ใช้ตัวนี้ */
+/** Request-deduped: metadata และ page ใช้ตัวนี้ — ไม่ throw ตอน WP/GraphQL ล้ม */
 async function getPriceOrNull(slug: string) {
   const s = String(slug || "").trim().toLowerCase();
   if (!s) return null;
-  const data = await getCachedPricemodelsList();
-  let price: any = (data?.pricemodels?.nodes ?? []).find(
-    (n: any) => isSiteMatch(n?.site) && String(n?.slug || "").toLowerCase() === s
-  );
+  let price: any = null;
+  try {
+    const data = await getCachedPricemodelsList();
+    price = (data?.pricemodels?.nodes ?? []).find(
+      (n: any) => isSiteMatch(n?.site) && String(n?.slug || "").toLowerCase() === s
+    );
+  } catch {
+    /* GraphQL ล้ม — ลอง by-slug */
+  }
   if (!price) {
-    const bySlug = await getCachedPriceBySlug(s);
-    const node = (bySlug?.pricemodels?.nodes ?? [])[0];
-    if (node && isSiteMatch(node?.site)) price = node;
+    try {
+      const bySlug = await getCachedPriceBySlug(s);
+      const node = (bySlug?.pricemodels?.nodes ?? [])[0];
+      if (node && isSiteMatch(node?.site)) price = node;
+    } catch {
+      return null;
+    }
   }
   if (!price || String(price?.status || "").toLowerCase() !== "publish") return null;
   return price;
@@ -67,8 +76,10 @@ export async function generateMetadata({ params }: { params: { slug: string } })
       description: desc,
       pathname,
     });
-  } catch (error) {
-    console.error("Error generating metadata for price:", slug, error);
+  } catch {
+    if (process.env.WP_DEBUG_GRAPHQL === "1") {
+      console.error("[metadata] price:", slug);
+    }
     return {};
   }
 }
@@ -89,8 +100,7 @@ export default async function Page({ params }: { params: { slug: string } }) {
       locationpages: { nodes: (r.locationpages?.nodes ?? []).filter((n: any) => isSiteMatch(n?.site)) },
       pricemodels: { nodes: (r.pricemodels?.nodes ?? []).filter((n: any) => isSiteMatch(n?.site)) },
     };
-  } catch (error) {
-    console.error("Error fetching hub index:", error);
+  } catch {
     index = emptyIndex;
   }
 

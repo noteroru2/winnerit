@@ -96,8 +96,10 @@ export async function generateMetadata({
       description,
       pathname,
     });
-  } catch (error) {
-    console.error("Error generating metadata for location:", slug, error);
+  } catch {
+    if (process.env.WP_DEBUG_GRAPHQL === "1") {
+      console.error("[metadata] location:", slug);
+    }
     return {};
   }
 }
@@ -127,8 +129,8 @@ export default async function Page({
       pricemodels: { nodes: (r.pricemodels?.nodes ?? []).filter((n: any) => isSiteMatch(n?.site)) },
       devicecategories: { nodes: (r.devicecategories?.nodes ?? []).filter((n: any) => isSiteMatch(n?.site)) },
     };
-  } catch (error) {
-    console.error("Error fetching hub index:", error);
+  } catch {
+    /* hub ล้ม — ใช้ index ว่าง */
   }
 
   let sitePage = {};

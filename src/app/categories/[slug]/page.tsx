@@ -67,17 +67,24 @@ const getCategoryData = cache(getCategoryPageData);
 export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
   const slugParam = String(params.slug || "").trim();
   if (!slugParam) return {};
-  const { term } = await getCategoryData(slugParam);
-  if (!term?.slug) return {};
-  const pathname = `/categories/${term.slug}`;
-  const termName = term.name || term.slug;
-  const fallback = `รวมเนื้อหาในหมวด ${termName}: บริการ • พื้นที่ • รุ่น/ราคา • FAQ พร้อมลิงก์เชื่อมโยงภายในแบบ Silo`;
-  const desc = inferDescriptionFromHtml(term.description, fallback);
-  return pageMetadata({
-    title: `หมวดสินค้า: ${termName}`,
-    description: desc,
-    pathname,
-  });
+  try {
+    const { term } = await getCategoryData(slugParam);
+    if (!term?.slug) return {};
+    const pathname = `/categories/${term.slug}`;
+    const termName = term.name || term.slug;
+    const fallback = `รวมเนื้อหาในหมวด ${termName}: บริการ • พื้นที่ • รุ่น/ราคา • FAQ พร้อมลิงก์เชื่อมโยงภายในแบบ Silo`;
+    const desc = inferDescriptionFromHtml(term.description, fallback);
+    return pageMetadata({
+      title: `หมวดสินค้า: ${termName}`,
+      description: desc,
+      pathname,
+    });
+  } catch {
+    if (process.env.WP_DEBUG_GRAPHQL === "1") {
+      console.error("[metadata] category:", slugParam);
+    }
+    return {};
+  }
 }
 
 export default async function Page({ params }: { params: { slug: string } }) {

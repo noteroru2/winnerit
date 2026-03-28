@@ -50,13 +50,19 @@ async function getServiceOrNull(slug: string) {
         String(n?.slug || "").toLowerCase() === s.toLowerCase()
     );
     if (!hit) return null;
-  } catch { /* fallthrough */ }
-  const bySlug = await getCachedServiceBySlug(s);
-  const node = (bySlug?.services?.nodes ?? [])[0];
-  if (!node) return null;
-  if (String(node?.status || "").toLowerCase() !== "publish") return null;
-  if (!isSiteMatch(node?.site)) return null;
-  return node;
+  } catch {
+    /* slugs ล้มหรือ timeout — ลองโหลดรายการเต็มด้วย by-slug */
+  }
+  try {
+    const bySlug = await getCachedServiceBySlug(s);
+    const node = (bySlug?.services?.nodes ?? [])[0];
+    if (!node) return null;
+    if (String(node?.status || "").toLowerCase() !== "publish") return null;
+    if (!isSiteMatch(node?.site)) return null;
+    return node;
+  } catch {
+    return null;
+  }
 }
 const getService = cache(getServiceOrNull);
 
@@ -81,8 +87,10 @@ export async function generateMetadata({ params }: { params: { slug: string } })
       description: desc,
       pathname,
     });
-  } catch (error) {
-    console.error("Error generating metadata for service:", slug, error);
+  } catch {
+    if (process.env.WP_DEBUG_GRAPHQL === "1") {
+      console.error("[metadata] service:", slug);
+    }
     return {};
   }
 }
